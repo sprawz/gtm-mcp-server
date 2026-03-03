@@ -219,6 +219,7 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 JWT_SECRET=$(openssl rand -base64 32)
 BASE_URL=http://localhost:8080
+AUTH_MODE=oauth
 EOF
 
 # Start the server
@@ -227,6 +228,13 @@ docker compose up -d
 # Add to Claude
 claude mcp add -t http gtm http://localhost:8080
 ```
+
+### Authentication Modes
+
+The server supports two authentication modes, configurable via the `AUTH_MODE` environment variable:
+
+- **`oauth` (Default)**: Interactive user flow. Users must sign in with their Google account through a browser. Best for personal use or multi-user environments.
+- **`adc`**: Server-side Application Default Credentials. The server uses its own Service Account identity (via `GOOGLE_APPLICATION_CREDENTIALS` or GCP metadata) to talk to GTM. Best for automated/headless environments or Cloud Run deployments.
 
 #### Docker-to-Docker
 

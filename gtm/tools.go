@@ -3,6 +3,7 @@ package gtm
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"gtm-mcp-server/auth"
 
@@ -10,7 +11,9 @@ import (
 )
 
 // RegisterTools adds all GTM tools to the MCP server.
-func RegisterTools(server *mcp.Server) {
+func RegisterTools(server *mcp.Server, tokenProvider auth.TokenProvider) {
+	globalTokenProvider = tokenProvider
+
 	// Read operations
 	registerListAccounts(server)
 	registerListContainers(server)
@@ -84,23 +87,22 @@ func RegisterTools(server *mcp.Server) {
 	RegisterPrompts(server)
 }
 
-// getClient creates a GTM client from the request context with auto-refreshing tokens.
+// globalTokenProvider holds the injected strategy for obtaining tokens.
+var globalTokenProvider auth.TokenProvider
+
+// getClient creates a GTM client using the injected token provider.
 func getClient(ctx context.Context) (*Client, error) {
-	tokenInfo := auth.GetTokenInfo(ctx)
-	if tokenInfo == nil || tokenInfo.GoogleToken == nil {
-		return nil, fmt.Errorf("not authenticated - please authenticate with Google first")
+	if globalTokenProvider == nil {
+		return nil, fmt.Errorf("token provider not configured")
 	}
 
-	store := auth.GetTokenStore(ctx)
-	google := auth.GetGoogleProvider(ctx)
-
-	// Create auto-refreshing token source
-	var tokenSource = auth.NewAutoRefreshTokenSource(
-		store,
-		tokenInfo.AccessToken,
-		google.Config(),
-		tokenInfo.GoogleToken,
-	)
+	// We pass a dummy request here as the user OAuth provider pulls from context.
+	// A more robust implementation might attach the *http.Request to context upstream.
+	dummyReq, _ := http.NewRequestWithContext(ctx, "GET", "/", nil)
+	tokenSource, err := globalTokenProvider.GetTokenSource(ctx, dummyReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token source: %w", err)
+	}
 
 	return NewClient(ctx, tokenSource)
 }

@@ -55,9 +55,6 @@ func main() {
 	// Add logging middleware
 	server.AddReceivingMiddleware(middleware.NewLoggingMiddleware(logger))
 
-	// Register tools
-	registerTools(server)
-
 	// Create HTTP handler for MCP
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return server
@@ -102,8 +99,17 @@ func main() {
 	oauthLimiter := middleware.NewRateLimiter(10, 20)   // 10 req/s, burst 20
 	registerLimiter := middleware.NewRateLimiter(2, 5)   // 2 req/s, burst 5
 
-	if oauthConfigured {
-		// Set up OAuth
+	var tokenProvider auth.TokenProvider
+
+	if cfg.AuthMode == "adc" {
+		logger.Info("using server-side Application Default Credentials (ADC) for GTM authentication")
+		tokenProvider = auth.NewServerADCProvider(auth.GoogleScopes)
+		
+		// In ADC mode, we don't need interactive OAuth middleware
+		mux.Handle("/", maxBytesHandler(5<<20, mcpHandler))
+	} else if oauthConfigured {
+		logger.Info("using interactive user OAuth flow for GTM authentication")
+		
 		tokenStore = auth.NewMemoryTokenStore()
 		googleProvider := auth.NewGoogleProvider(
 			cfg.GoogleClientID,
@@ -111,6 +117,8 @@ func main() {
 			cfg.BaseURL+"/oauth/callback",
 		)
 		authServer = auth.NewServer(cfg.BaseURL, googleProvider, tokenStore, logger, cfg.AccessTokenTTL)
+
+		tokenProvider = auth.NewUserOAuthProvider()
 
 		// OAuth endpoints with rate limiting and body size limits
 		mux.HandleFunc("GET /authorize", oauthLimiter.MiddlewareFunc(authServer.AuthorizeHandler))
@@ -134,6 +142,9 @@ func main() {
 	} else {
 		logger.Warn("OAuth not configured, running without authentication", "error", cfg.ValidateAuth())
 
+		// Fallback to UserOAuthProvider which will return errors when tools are called without tokens
+		tokenProvider = auth.NewUserOAuthProvider()
+
 		// Register OAuth endpoints that return proper errors
 		oauthNotConfiguredHandler := func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -151,6 +162,9 @@ func main() {
 		// MCP endpoint without auth (still apply body size limit)
 		mux.Handle("/", maxBytesHandler(5<<20, mcpHandler))
 	}
+
+	// Register tools
+	registerTools(server, tokenProvider)
 
 	// Create HTTP server
 	addr := fmt.Sprintf(":%d", cfg.Port)
@@ -195,9 +209,9 @@ func main() {
 }
 
 // registerTools adds MCP tools to the server.
-func registerTools(server *mcp.Server) {
+func registerTools(server *mcp.Server, tokenProvider auth.TokenProvider) {
 	registerUtilityTools(server)
-	gtm.RegisterTools(server)
+	gtm.RegisterTools(server, tokenProvider)
 }
 
 // maxBytesHandler wraps an http.Handler with a request body size limit.
