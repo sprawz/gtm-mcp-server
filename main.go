@@ -210,7 +210,7 @@ func main() {
 
 // registerTools adds MCP tools to the server.
 func registerTools(server *mcp.Server, tokenProvider auth.TokenProvider) {
-	registerUtilityTools(server)
+	registerUtilityTools(server, tokenProvider)
 	gtm.RegisterTools(server, tokenProvider)
 }
 
@@ -225,7 +225,7 @@ func maxBytesHandler(maxBytes int64, next http.Handler) http.Handler {
 }
 
 // registerUtilityTools adds ping and auth_status tools.
-func registerUtilityTools(server *mcp.Server) {
+func registerUtilityTools(server *mcp.Server, tokenProvider auth.TokenProvider) {
 	// Ping tool for testing connectivity
 	type PingInput struct {
 		Message string `json:"message,omitempty" jsonschema:"Optional message to echo back"`
@@ -250,6 +250,7 @@ func registerUtilityTools(server *mcp.Server) {
 	type AuthStatusInput struct{}
 	type AuthStatusOutput struct {
 		Authenticated bool   `json:"authenticated"`
+		HasAccess     bool   `json:"has_access"`
 		Message       string `json:"message"`
 	}
 
@@ -257,13 +258,27 @@ func registerUtilityTools(server *mcp.Server) {
 		Name:        "auth_status",
 		Description: "Check authentication status with Google Tag Manager",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input AuthStatusInput) (*mcp.CallToolResult, AuthStatusOutput, error) {
-		tokenInfo := auth.GetTokenInfo(ctx)
-		output := AuthStatusOutput{Authenticated: tokenInfo != nil}
-		if tokenInfo != nil {
-			output.Message = "You are authenticated and can access GTM data"
-		} else {
-			output.Message = "Not authenticated. GTM tools will require authentication."
+		if !tokenProvider.IsAuthenticated(ctx) {
+			return nil, AuthStatusOutput{
+				Authenticated: false,
+				HasAccess:     false,
+				Message:       "No valid credentials found. Please log in.",
+			}, nil
 		}
-		return nil, output, nil
+
+		err := tokenProvider.VerifyAccess(ctx)
+		if err != nil {
+			return nil, AuthStatusOutput{
+				Authenticated: true,
+				HasAccess:     false,
+				Message:       fmt.Sprintf("Credentials are valid, but GTM access was denied. Ensure the account/service account has GTM permissions. Error: %v", err),
+			}, nil
+		}
+
+		return nil, AuthStatusOutput{
+			Authenticated: true,
+			HasAccess:     true,
+			Message:       "System is fully authenticated and authorized to access GTM.",
+		}, nil
 	})
 }

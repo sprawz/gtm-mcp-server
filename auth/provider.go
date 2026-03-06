@@ -12,4 +12,11 @@ import (
 type TokenProvider interface {
 	// GetTokenSource returns a TokenSource based on the request context and/or HTTP request.
 	GetTokenSource(ctx context.Context, req *http.Request) (oauth2.TokenSource, error)
+
+	// IsAuthenticated returns true if the current context/environment is authenticated.
+	IsAuthenticated(ctx context.Context) bool
+
+	// VerifyAccess performs an active check against the downstream service (GTM).
+	// It should implement caching to prevent rate-limiting.
+	VerifyAccess(ctx context.Context) error
 }
