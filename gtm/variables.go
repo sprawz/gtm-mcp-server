@@ -12,6 +12,7 @@ type Variable struct {
 	VariableID string `json:"variableId"`
 	Name       string `json:"name"`
 	Type       string `json:"type"`
+	Parameter  any    `json:"parameter,omitempty"`
 	Path       string `json:"path"`
 }
 
@@ -47,18 +48,25 @@ func (c *Client) GetVariable(ctx context.Context, accountID, containerID, worksp
 		Type:       v.Type,
 		Path:       v.Path,
 	}
+	if len(v.Parameter) > 0 {
+		result.Parameter = v.Parameter
+	}
 	return &result, nil
 }
 
 func toVariables(variables []*tagmanager.Variable) []Variable {
 	result := make([]Variable, 0, len(variables))
 	for _, v := range variables {
-		result = append(result, Variable{
+		variable := Variable{
 			VariableID: v.VariableId,
 			Name:       v.Name,
 			Type:       v.Type,
 			Path:       v.Path,
-		})
+		}
+		if len(v.Parameter) > 0 {
+			variable.Parameter = v.Parameter
+		}
+		result = append(result, variable)
 	}
 	return result
 }

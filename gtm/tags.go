@@ -24,6 +24,7 @@ type Tag struct {
 	TagID             string              `json:"tagId"`
 	Name              string              `json:"name"`
 	Type              string              `json:"type"`
+	Parameter         any                 `json:"parameter,omitempty"`
 	FiringTriggerID   []string            `json:"firingTriggerId,omitempty"`
 	BlockingTriggerID []string            `json:"blockingTriggerId,omitempty"`
 	SetupTag          []TagSequenceRef    `json:"setupTag,omitempty"`
@@ -80,6 +81,9 @@ func toTag(t *tagmanager.Tag) Tag {
 		BlockingTriggerID: t.BlockingTriggerId,
 		Paused:            t.Paused,
 		Path:              t.Path,
+	}
+	if len(t.Parameter) > 0 {
+		tag.Parameter = t.Parameter
 	}
 	for _, s := range t.SetupTag {
 		tag.SetupTag = append(tag.SetupTag, TagSequenceRef{
