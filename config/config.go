@@ -16,6 +16,11 @@ type Config struct {
 	Port    int
 	BaseURL string
 
+	// Auth configuration
+	// AuthMode determines how the server authenticates with Google Tag Manager.
+	// Valid values: "oauth" (default, interactive user flow) or "adc" (server-side Application Default Credentials).
+	AuthMode string
+
 	// Google OAuth configuration
 	GoogleClientID     string
 	GoogleClientSecret string
@@ -46,6 +51,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:              getEnvInt("PORT", 8080),
 		BaseURL:           getEnv("BASE_URL", "http://localhost:8080"),
+		AuthMode:          getEnv("AUTH_MODE", "oauth"),
 		GoogleClientID:    getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURI: getEnv("GOOGLE_REDIRECT_URI", ""),
