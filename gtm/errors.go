@@ -98,7 +98,7 @@ func mapGoogleError(err error) error {
 		case 400:
 			return fmt.Errorf("%w: %s", ErrInvalidRequest, detail)
 		default:
-			return fmt.Errorf("API error %d: %s", apiErr.Code, detail)
+			return fmt.Errorf("API error %d: %s: %w", apiErr.Code, detail, apiErr)
 		}
 	}
 

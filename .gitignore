@@ -9,6 +9,9 @@ go-sdk-main/
 !.github/
 !.goreleaser.yaml
 
+# Local docs / specs
+/docs/
+
 # Build artifacts
 dist/
 

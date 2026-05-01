@@ -28,7 +28,6 @@ Create tags, audit configurations, generate tracking plans, and publish changes,
 - [How It Works](#how-it-works)
 - [Safety Features](#safety-features)
 - [Self-Hosting](#self-hosting)
-- [Examples](#service-account-mode-s2s)
 - [Available Tools](#available-tools)
 - [Resources & Prompts](#resources--prompts)
 - [Better AI Context](#better-ai-context)
