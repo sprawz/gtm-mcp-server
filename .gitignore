@@ -4,6 +4,7 @@ go-sdk-main/
 .env
 .env.deploy
 !README.md
+!ARCHITECTURE.md
 .env.local
 .*/
 !.github/
