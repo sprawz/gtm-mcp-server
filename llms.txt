@@ -1,0 +1,188 @@
+# GTM MCP Server
+
+> AI-accessible API for Google Tag Manager. Create tags, audit containers, generate tracking plans, and publish changes — all through natural language.
+
+- URL: https://mcp.gtmeditor.com
+- Protocol: Model Context Protocol (MCP) over Streamable HTTP
+- Auth: OAuth 2.1 with PKCE (Google account)
+
+## GTM Hierarchy
+
+Account → Container → Workspace → Entities (Tags, Triggers, Variables)
+
+Server-side containers also have: Clients, Transformations
+
+Key rules:
+- All mutations happen at the Workspace level — never on the live container
+- Changes must be versioned before publishing
+- Delete and Publish operations require `confirm: true`
+- Updates auto-handle fingerprint for optimistic concurrency
+
+## Getting Started
+
+1. Call `auth_status` to verify authentication
+2. `list_accounts` → pick an account
+3. `list_containers(accountId)` → pick a container
+4. `list_workspaces(accountId, containerId)` → pick a workspace (usually "Default Workspace")
+5. Now you can read and write tags, triggers, and variables
+
+Always discover IDs by listing — never guess or hardcode them.
+
+## Tools
+
+### Read Operations
+| Tool | Purpose |
+|------|---------|
+| `list_accounts` | List all GTM accounts the user has access to |
+| `list_containers` | List containers in an account (needs accountId) |
+| `list_workspaces` | List workspaces in a container (needs accountId, containerId) |
+| `list_tags` | List all tags in a workspace |
+| `get_tag` | Get full tag details by ID |
+| `list_triggers` | List all triggers in a workspace |
+| `get_trigger` | Get full trigger details by ID |
+| `list_variables` | List all variables in a workspace |
+| `get_variable` | Get full variable details by ID |
+| `list_folders` | List folders in a workspace |
+| `get_folder_entities` | Get tags/triggers/variables in a specific folder |
+| `list_built_in_variables` | List enabled built-in variables |
+| `get_workspace_status` | Check pending changes and merge conflicts |
+
+### Write Operations
+| Tool | Purpose |
+|------|---------|
+| `create_tag` | Create a new tag (needs trigger IDs) |
+| `update_tag` | Modify an existing tag |
+| `delete_tag` | Remove a tag (requires `confirm: true`) |
+| `create_trigger` | Create a new trigger |
+| `update_trigger` | Modify an existing trigger |
+| `delete_trigger` | Remove a trigger (requires `confirm: true`) |
+| `create_variable` | Create a new variable |
+| `update_variable` | Modify an existing variable |
+| `delete_variable` | Remove a variable (requires `confirm: true`) |
+| `create_container` | Create a new container in an account |
+| `update_container` | Rename a container |
+| `delete_container` | Remove a container (requires `confirm: true`) |
+| `create_workspace` | Create a new workspace |
+| `update_account` | Rename a GTM account |
+| `enable_built_in_variables` | Enable built-in variable types |
+| `disable_built_in_variables` | Disable built-in variable types (requires `confirm: true`) |
+
+### Server-Side Container Tools
+| Tool | Purpose |
+|------|---------|
+| `list_clients` | List all clients in a server-side workspace |
+| `get_client` | Get client details by ID |
+| `create_client` | Create a new client |
+| `update_client` | Modify an existing client |
+| `delete_client` | Remove a client (requires `confirm: true`) |
+| `list_transformations` | List all transformations |
+| `get_transformation` | Get transformation details by ID |
+| `create_transformation` | Create a new transformation |
+| `update_transformation` | Modify an existing transformation |
+| `delete_transformation` | Remove a transformation (requires `confirm: true`) |
+
+### Publishing
+| Tool | Purpose |
+|------|---------|
+| `get_workspace_status` | Check pending changes and conflicts before versioning |
+| `create_version` | Create a version from workspace changes |
+| `publish_version` | Publish a version to go live (requires `confirm: true`) |
+| `list_versions` | List all container versions |
+
+### Templates
+| Tool | Purpose |
+|------|---------|
+| `get_tag_templates` | Get GA4/HTML tag parameter format examples — call this before creating tags |
+| `get_trigger_templates` | Get trigger configuration examples — call this before creating triggers |
+| `list_templates` | List custom templates in a workspace |
+| `get_template` | Get template details including .tpl code |
+| `create_template` | Create a custom template from .tpl code |
+| `update_template` | Modify an existing template |
+| `delete_template` | Remove a template (requires `confirm: true`) |
+| `import_gallery_template` | Import a template from the Community Gallery |
+
+### Utility
+| Tool | Purpose |
+|------|---------|
+| `ping` | Test connectivity to the server |
+| `auth_status` | Check authentication status |
+
+## Prompts (Workflow Templates)
+
+These fetch workspace data and return structured analysis requests:
+
+| Prompt | Arguments | Purpose |
+|--------|-----------|---------|
+| `audit_container` | accountId, containerId, workspaceId | Analyze workspace for naming issues, duplicates, orphaned items, security concerns |
+| `generate_tracking_plan` | accountId, containerId, workspaceId | Generate markdown documentation of all events, triggers, variables |
+| `suggest_ga4_setup` | goals (text description) | Recommend GA4 tag structure based on tracking goals |
+| `find_gallery_template` | templateName | Guide to find and import a Community Gallery template |
+
+## Resources (URI-based Access)
+
+Direct data access via URI patterns:
+
+```
+gtm://accounts
+gtm://accounts/{accountId}/containers
+gtm://accounts/{accountId}/containers/{containerId}/workspaces
+gtm://accounts/{accountId}/containers/{containerId}/workspaces/{workspaceId}/tags
+gtm://accounts/{accountId}/containers/{containerId}/workspaces/{workspaceId}/triggers
+gtm://accounts/{accountId}/containers/{containerId}/workspaces/{workspaceId}/variables
+```
+
+## Common Workflows
+
+### Create a GA4 Event Tag
+1. `get_tag_templates` → study the GA4 event parameter format
+2. `get_trigger_templates` → study trigger format
+3. `create_trigger` → create the firing condition (e.g., custom event)
+4. `create_tag` → create the GA4 event tag, referencing the trigger ID from step 3
+
+### Audit a Container
+1. Discover IDs: `list_accounts` → `list_containers` → `list_workspaces`
+2. Use the `audit_container` prompt with the discovered IDs
+3. Or manually: `list_tags` + `list_triggers` + `list_variables` and analyze
+
+### Publish Changes
+1. `get_workspace_status` → verify no merge conflicts, review pending changes
+2. `create_version` → snapshot the workspace into a version
+3. `publish_version` with `confirm: true` → push the version live
+
+### Set Up Full Ecommerce Tracking
+1. `get_tag_templates` → see ecommerce tag formats
+2. Create triggers for each ecommerce event (purchase, add_to_cart, view_item, etc.)
+3. Create GA4 event tags for each, with `sendEcommerceData: true`
+4. Create a measurement ID variable if reusing across tags
+5. Version and publish when ready
+
+### Import a Community Template
+1. Use the `find_gallery_template` prompt with the template name
+2. Search for the template's GitHub repository (format: `github.com/{owner}/{repo}`)
+3. `import_gallery_template` with `galleryOwner` and `galleryRepository`
+
+## Safety Rules
+
+- **Always check status before versioning**: call `get_workspace_status` before `create_version`
+- **Always version before publishing**: call `create_version` before `publish_version`
+- **Confirm destructive actions**: `delete_tag`, `delete_trigger`, `delete_variable`, `delete_container`, `delete_client`, `delete_transformation`, `disable_built_in_variables`, and `publish_version` all require `confirm: true`
+- **Create triggers before tags**: tags reference trigger IDs, so the trigger must exist first
+- **Use templates for parameter format**: call `get_tag_templates` / `get_trigger_templates` before creating tags or triggers — the GTM API parameter format is non-obvious
+- **Don't skip discovery**: always list accounts/containers/workspaces to get IDs rather than assuming them
+
+## GA4 Tag Parameter Format
+
+GA4 tags use a specific nested parameter structure. Key points:
+
+- Tag type `gaawc` = GA4 Configuration, `gaawe` = GA4 Event
+- `measurementId` must be an empty `tagReference` type; use `measurementIdOverride` for the actual value
+- Event parameters are nested: `list` → `map` → `template` with `name`/`value` keys
+- Ecommerce tags need `sendEcommerceData: true` and `getEcommerceDataFrom: dataLayer`
+
+Always call `get_tag_templates` for exact format — do not guess the parameter structure.
+
+## Known Limitations
+
+- `autoEventFilter` on click/form triggers is silently dropped by the Google Tag Manager API (use the GTM web interface for those conditions)
+- Tokens are in-memory — server restarts require re-authentication
+- Rate limits: 10 req/s for OAuth endpoints, standard Google API quotas for GTM operations

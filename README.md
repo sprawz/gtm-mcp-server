@@ -57,8 +57,9 @@ Create tags, audit configurations, generate tracking plans, and publish changes,
   - [Resources (URI-based access)](#resources-uri-based-access)
   - [Prompts (Workflow templates)](#prompts-workflow-templates)
 - [Better AI Context](#better-ai-context)
-  - [Claude Code](#claude-code)
-  - [OpenAI Codex](#openai-codex)
+  - [llms.txt — For Any LLM or Agent](#llmstxt--for-any-llm-or-agent)
+  - [Claude Code Skill — Guided Workflows](#claude-code-skill--guided-workflows)
+  - [GTM API Skill — API Reference](#gtm-api-skill--api-reference)
 - [Architecture](#architecture)
 - [Known Issues](#known-issues)
 - [Links](#links)
@@ -488,34 +489,57 @@ gtm://accounts/.../workspaces/{id}/variables
 
 ## Better AI Context
 
-For best results, install the **GTM API skill** so your AI assistant understands GTM's API structure, parameter formats, and validation rules.
+The server provides two resources to help AI assistants use it more effectively — one for any LLM or agent, and one specifically for Claude Code users.
 
-### Claude Code
+### llms.txt — For Any LLM or Agent
+
+The server hosts an [`llms.txt`](https://mcp.gtmeditor.com/llms.txt) file at its root that any LLM or agent can fetch for context. It documents the GTM hierarchy, all available tools, common workflows, safety rules, and the GA4 parameter format.
+
+```
+https://mcp.gtmeditor.com/llms.txt
+```
+
+This follows the [llms.txt](https://llmstxt.org/) standard. Agent frameworks that support llms.txt will pick this up automatically. You can also fetch it manually or include it as a system prompt for custom integrations.
+
+### Claude Code Skill — Guided Workflows
+
+For Claude Code users, install the **GTM MCP skill** for guided workflows, anti-patterns to avoid, and step-by-step task patterns:
 
 ```bash
 # One-liner install
+curl -sL https://github.com/paolobietolini/gtm-mcp-server/archive/main.tar.gz | tar xz && \
+  mkdir -p ~/.claude/skills && \
+  cp -r gtm-mcp-server-main/skills/gtm-mcp ~/.claude/skills/ && \
+  rm -rf gtm-mcp-server-main
+```
+
+Or clone and copy:
+```bash
+git clone https://github.com/paolobietolini/gtm-mcp-server.git
+cp -r gtm-mcp-server/skills/gtm-mcp ~/.claude/skills/
+```
+
+The skill teaches Claude how to discover IDs, create tags with the correct parameter format, follow the publish workflow, and avoid common mistakes.
+
+### GTM API Skill — API Reference
+
+For deeper API context (parameter schemas, validation rules, request templates for all entity types), install the **GTM API skill**:
+
+**Claude Code:**
+```bash
 curl -sL https://github.com/paolobietolini/gtm-api-for-llms/archive/main.tar.gz | tar xz && \
   mkdir -p ~/.claude/skills && \
   cp -r gtm-api-for-llms-main/skills/gtm-api ~/.claude/skills/ && \
   rm -rf gtm-api-for-llms-main
 ```
 
-Or clone and copy:
-```bash
-git clone https://github.com/paolobietolini/gtm-api-for-llms.git
-cp -r gtm-api-for-llms/skills/gtm-api ~/.claude/skills/
-```
-
-### OpenAI Codex
-
+**OpenAI Codex:**
 ```bash
 curl -sL https://github.com/paolobietolini/gtm-api-for-llms/archive/main.tar.gz | tar xz && \
   mkdir -p ~/.codex/skills && \
   cp -r gtm-api-for-llms-main/skills/gtm-api ~/.codex/skills/ && \
   rm -rf gtm-api-for-llms-main
 ```
-
-### What does the skill include?
 
 The [GTM API for LLMs](https://github.com/paolobietolini/gtm-api-for-llms) repository provides LLM-optimized documentation: request templates, validation rules, workflow algorithms, and complete schemas for all GTM entity types including server-side containers.
 

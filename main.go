@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/oauth2"
 )
+
+//go:embed llms.txt
+var llmsTxt string
 
 const (
 	serverName    = "gtm-mcp-server"
@@ -76,6 +80,13 @@ func main() {
 			"service": serverName,
 			"version": serverVersion,
 		})
+	})
+
+	// LLM context endpoint (no auth required)
+	mux.HandleFunc("GET /llms.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(llmsTxt))
 	})
 
 	// URL resolver for dynamic base URL resolution in Docker-to-Docker contexts.
