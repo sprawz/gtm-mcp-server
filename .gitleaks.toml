@@ -1,0 +1,7 @@
+title = "GTM MCP Server"
+
+[allowlist]
+  description = "Documentation example commands containing placeholder values"
+  paths = [
+    '''(?i)readme\.md''',
+  ]
