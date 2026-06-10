@@ -17,12 +17,15 @@ jobs:
       contents: read
       security-events: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - uses: golang/govulncheck-action@v1
         with:
-          repo-checkout: true
+          repo-checkout: false
       - uses: securego/gosec@v2.27.1
       - uses: dominikh/staticcheck-action@v1
       - name: Gitleaks
@@ -43,6 +46,7 @@ jobs:
       contents: read
       security-events: write
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
