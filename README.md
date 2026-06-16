@@ -369,6 +369,16 @@ ALLOWED_HOSTS=gtm-mcp:8080
 
 This enables dynamic URL resolution for trusted internal hostnames while keeping the server secure against host header injection.
 
+#### Token Persistence (TOKEN_STORE_PATH)
+
+By default, issued tokens are kept in memory only, so **every container restart logs all users out** and forces them to re-authenticate. To keep sessions across restarts, point `TOKEN_STORE_PATH` at a file on a mounted volume:
+
+```bash
+TOKEN_STORE_PATH=/data/tokens.json
+```
+
+The Portainer Compose file (`docker-compose.portainer.yml`) already wires this up with a named `mcp_tokens` volume. Leave `TOKEN_STORE_PATH` unset to keep the in-memory behaviour.
+
 ### Google Cloud Setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)

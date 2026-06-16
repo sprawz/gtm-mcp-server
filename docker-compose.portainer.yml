@@ -13,6 +13,11 @@ services:
       BASE_URL: ${BASE_URL}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Persist issued tokens so users stay authenticated across restarts.
+      TOKEN_STORE_PATH: /data/tokens.json
+
+    volumes:
+      - mcp_tokens:/data
 
     networks:
       - docker_bridge
@@ -29,6 +34,9 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  mcp_tokens:
 
 networks:
   docker_bridge:

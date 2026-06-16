@@ -134,8 +134,19 @@ func main() {
 	registerLimiter := middleware.NewRateLimiter(2, 5, cfg.TrustProxy)   // 2 req/s, burst 5
 
 	if oauthConfigured {
-		// Set up OAuth
-		tokenStore = auth.NewMemoryTokenStore()
+		// Set up OAuth. Use a file-backed store when a path is configured so
+		// sessions survive restarts; otherwise fall back to in-memory.
+		if cfg.TokenStorePath != "" {
+			fileStore, err := auth.NewFileTokenStore(cfg.TokenStorePath, logger)
+			if err != nil {
+				logger.Error("failed to initialize file token store", "error", err, "path", cfg.TokenStorePath)
+				os.Exit(1)
+			}
+			tokenStore = fileStore
+			logger.Info("token persistence enabled", "path", cfg.TokenStorePath)
+		} else {
+			tokenStore = auth.NewMemoryTokenStore()
+		}
 		googleProvider := auth.NewGoogleProvider(
 			cfg.GoogleClientID,
 			cfg.GoogleClientSecret,

@@ -30,6 +30,10 @@ type Config struct {
 	// Token configuration
 	AccessTokenTTL time.Duration
 
+	// TokenStorePath, when set, persists issued tokens to this JSON file so
+	// sessions survive restarts. Empty means in-memory only (the default).
+	TokenStorePath string
+
 	// AllowedHosts lists additional trusted hostnames for dynamic base URL resolution.
 	// Enables Docker-to-Docker contexts where the server is reached via internal aliases.
 	AllowedHosts []string
@@ -60,6 +64,7 @@ func Load() (*Config, error) {
 		JWTSecret:         getEnv("JWT_SECRET", ""),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		AccessTokenTTL:    getEnvDuration("ACCESS_TOKEN_TTL", 8*time.Hour),
+		TokenStorePath:    getEnv("TOKEN_STORE_PATH", ""),
 		AllowedHosts:      getEnvList("ALLOWED_HOSTS"),
 		ServiceAccountAPIKey:  getEnv("SERVICE_ACCOUNT_API_KEY", ""),
 		ServiceAccountKeyJSON: getEnv("GOOGLE_SERVICE_ACCOUNT_KEY_JSON", ""),

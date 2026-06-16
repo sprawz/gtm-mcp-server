@@ -27,8 +27,10 @@ RUN apk add --no-cache ca-certificates tzdata
 # Copy binary from builder
 COPY --from=builder /app/gtm-mcp-server .
 
-# Create non-root user
-RUN adduser -D -g '' appuser
+# Create non-root user and a writable data dir for the token store.
+# A named volume mounted at /data inherits this ownership, so the app can
+# persist tokens while still running as a non-root user.
+RUN adduser -D -g '' appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser
 
 # Expose port
