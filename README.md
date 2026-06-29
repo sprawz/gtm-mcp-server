@@ -331,8 +331,9 @@ See [`examples/gtm_agent.py`](examples/gtm_agent.py) for a complete Python agent
 ### Docker Setup
 
 ```bash
-git clone https://github.com/paolobietolini/gtm-mcp-server.git
+git clone https://github.com/smg-real-estate/gtm-mcp-server.git
 cd gtm-mcp-server
+git checkout v1.6.0
 
 # Create .env file
 cat > .env << 'EOF'
@@ -507,16 +508,17 @@ For Claude Code users, install the **GTM MCP skill** for guided workflows, anti-
 
 ```bash
 # One-liner install
-curl -sL https://github.com/paolobietolini/gtm-mcp-server/archive/main.tar.gz | tar xz && \
+curl -sL https://github.com/smg-real-estate/gtm-mcp-server/archive/v1.6.0.tar.gz | tar xz && \
   mkdir -p ~/.claude/skills && \
-  cp -r gtm-mcp-server-main/skills/gtm-mcp ~/.claude/skills/ && \
-  rm -rf gtm-mcp-server-main
+  cp -r gtm-mcp-server-1.6.0/skills/gtm-mcp ~/.claude/skills/ && \
+  rm -rf gtm-mcp-server-1.6.0
 ```
 
 Or clone and copy:
 ```bash
-git clone https://github.com/paolobietolini/gtm-mcp-server.git
-cp -r gtm-mcp-server/skills/gtm-mcp ~/.claude/skills/
+git clone https://github.com/smg-real-estate/gtm-mcp-server.git
+cd gtm-mcp-server && git checkout v1.6.0
+cp -r skills/gtm-mcp ~/.claude/skills/
 ```
 
 The skill teaches Claude how to discover IDs, create tags with the correct parameter format, follow the publish workflow, and avoid common mistakes.
