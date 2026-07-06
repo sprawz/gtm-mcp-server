@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"gtm-mcp-server/gtm/bestpractices"
 )
 
 // RegisterPrompts adds all GTM prompts to the MCP server.
@@ -49,6 +52,28 @@ func RegisterPrompts(server *mcp.Server) {
 			{Name: "templateName", Description: "The name of the template to find (e.g., 'iubenda', 'cookiebot', 'facebook pixel')", Required: true},
 		},
 	}, handleFindGalleryTemplatePrompt)
+
+	// Best practices review - scored review against embedded rule docs
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "best_practices_review",
+		Description: "Score a GTM workspace against configuration best practices (naming, safe edits, GA4/consent, server-side) with pass/warn/fail per category and concrete fixes",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "accountId", Description: "The GTM account ID", Required: true},
+			{Name: "containerId", Description: "The GTM container ID", Required: true},
+			{Name: "workspaceId", Description: "The GTM workspace ID", Required: true},
+		},
+	}, handleBestPracticesReviewPrompt)
+
+	// Plan safe edit - step-by-step plan following the safe-edit workflow
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "plan_safe_edit",
+		Description: "Produce a step-by-step plan for a GTM change following the safe-edit workflow: workspace, diff review, version, approved publish",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "accountId", Description: "The GTM account ID", Required: true},
+			{Name: "containerId", Description: "The GTM container ID", Required: true},
+			{Name: "change_description", Description: "Description of the change to make (e.g., 'Add GA4 purchase event tracking')", Required: true},
+		},
+	}, handlePlanSafeEditPrompt)
 }
 
 func handleAuditContainerPrompt(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
@@ -98,6 +123,15 @@ func handleAuditContainerPrompt(ctx context.Context, req *mcp.GetPromptRequest) 
 		return nil, err
 	}
 
+	namingRules, err := bestpractices.Get("naming-organization")
+	if err != nil {
+		return nil, err
+	}
+	consentRules, err := bestpractices.Get("ga4-consent")
+	if err != nil {
+		return nil, err
+	}
+
 	return &mcp.GetPromptResult{
 		Description: "Container audit analysis request",
 		Messages: []*mcp.PromptMessage{
@@ -136,7 +170,15 @@ Please analyze and report on:
    - Are there any custom HTML tags that might pose security risks?
    - Are there any tags loading external scripts?
 
-Please provide specific recommendations for improvements.`, string(dataJSON)),
+Use the following rules as the reference standard for sections 1, 3, 4, and 5. If the container consistently follows its own different convention, treat that as acceptable and note the difference:
+
+%s
+
+---
+
+%s
+
+Please provide specific recommendations for improvements.`, string(dataJSON), namingRules, consentRules),
 				},
 			},
 		},
@@ -320,6 +362,127 @@ Please provide:
    - Expected GA4 events and parameters
 
 Please be specific about the GTM configuration - use the exact parameter formats shown in the templates.`, goals, string(templatesJSON)),
+				},
+			},
+		},
+	}, nil
+}
+
+func handleBestPracticesReviewPrompt(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	accountID := req.Params.Arguments["accountId"]
+	containerID := req.Params.Arguments["containerId"]
+	workspaceID := req.Params.Arguments["workspaceId"]
+
+	if accountID == "" || containerID == "" || workspaceID == "" {
+		return nil, fmt.Errorf("accountId, containerId, and workspaceId are required")
+	}
+
+	client, err := getClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := client.ListTags(ctx, accountID, containerID, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tags: %w", err)
+	}
+	triggers, err := client.ListTriggers(ctx, accountID, containerID, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list triggers: %w", err)
+	}
+	variables, err := client.ListVariables(ctx, accountID, containerID, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list variables: %w", err)
+	}
+
+	workspaceData := map[string]any{
+		"tags":      tags,
+		"triggers":  triggers,
+		"variables": variables,
+	}
+	dataJSON, err := json.MarshalIndent(workspaceData, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	var rules strings.Builder
+	for _, topic := range []string{"naming-organization", "ga4-consent", "server-side"} {
+		doc, err := bestpractices.Get(topic)
+		if err != nil {
+			return nil, err
+		}
+		rules.WriteString(doc)
+		rules.WriteString("\n\n---\n\n")
+	}
+
+	return &mcp.GetPromptResult{
+		Description: "Best practices review request",
+		Messages: []*mcp.PromptMessage{
+			{
+				Role: "user",
+				Content: &mcp.TextContent{
+					Text: fmt.Sprintf(`Please review this GTM workspace against the configuration best practices below.
+
+## Workspace configuration
+
+%s
+
+## Best practice rules
+
+%s
+
+## Instructions
+
+For each category (Naming and Organization, GA4 and Consent, Server-Side if applicable), score the workspace:
+
+- **pass** — rules followed
+- **warn** — minor deviations, list them
+- **fail** — clear violations, list them
+
+For every warn/fail, give the concrete fix: exact entity name, what to rename/change it to, or which tool call to make. If the container has its own consistent convention that differs from these rules, treat consistency with the existing convention as passing and note the difference instead. Skip the Server-Side category for web containers (no clients present). End with a prioritized fix list.`, string(dataJSON), rules.String()),
+				},
+			},
+		},
+	}, nil
+}
+
+func handlePlanSafeEditPrompt(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	accountID := req.Params.Arguments["accountId"]
+	containerID := req.Params.Arguments["containerId"]
+	changeDescription := req.Params.Arguments["change_description"]
+
+	if accountID == "" || containerID == "" || changeDescription == "" {
+		return nil, fmt.Errorf("accountId, containerId, and change_description are required")
+	}
+
+	workflow, err := bestpractices.Get("safe-edit-workflow")
+	if err != nil {
+		return nil, err
+	}
+	naming, err := bestpractices.Get("naming-organization")
+	if err != nil {
+		return nil, err
+	}
+
+	return &mcp.GetPromptResult{
+		Description: "Safe edit plan request",
+		Messages: []*mcp.PromptMessage{
+			{
+				Role: "user",
+				Content: &mcp.TextContent{
+					Text: fmt.Sprintf(`I want to make the following change to GTM container %s (account %s):
+
+**Change:** %s
+
+Follow this workflow strictly:
+
+%s
+
+Apply this naming convention to any new entities:
+
+%s
+
+Produce a step-by-step execution plan with the exact tool calls (create_workspace, then entity creation in dependency order with proposed names, then get_workspace_status, create_version with a proposed version name, and finally publish_version pending my approval). Show me the plan before executing anything.`, containerID, accountID, changeDescription, workflow, naming),
 				},
 			},
 		},
