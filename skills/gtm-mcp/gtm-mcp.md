@@ -61,6 +61,24 @@ This is a three-step process. Never skip steps.
 
 If `get_workspace_status` shows conflicts, resolve them before versioning.
 
+## Configuration Standards
+
+The server ships opinionated best-practice rules as readable resources. **Read the relevant one before creating or editing entities:**
+
+| Resource | When to read |
+|----------|-------------|
+| `gtm://best-practices` | Index — start here |
+| `gtm://best-practices/naming-organization` | Before creating/renaming any entity |
+| `gtm://best-practices/safe-edit-workflow` | Before any edit session |
+| `gtm://best-practices/ga4-consent` | When touching GA4 tags or consent setup |
+| `gtm://best-practices/server-side` | When the container is server-side |
+
+Core rules in brief:
+- **Naming**: `<Platform> - <Type> - <Descriptor>` (e.g. `GA4 - Event - purchase`, `DLV - transaction_id`). Variables for every hardcoded ID.
+- **Safe edits**: dedicated workspace per change → make changes → show `get_workspace_status` diff to the user → `create_version` with descriptive name → `publish_version` only after explicit approval.
+- **GA4**: one config tag with the measurement ID from a lookup table variable (`LT - GA4 Measurement ID`) keyed on hostname/environment; event parameters from data layer variables; consent mode tags fire on Consent Initialization.
+- **Existing conventions win**: if the container already follows a different consistent convention, match it and flag the difference instead of mixing conventions.
+
 ## Destructive Operations
 
 These tools require `confirm: true` — the server will reject the call without it:
@@ -73,11 +91,13 @@ Always explain what you're about to delete/publish and get user confirmation bef
 
 ## Using Prompts
 
-Four built-in prompts handle complex workflows:
+Six built-in prompts handle complex workflows:
 
 | Prompt | When to use |
 |--------|-------------|
 | `audit_container` | User asks to review, audit, or check their container for issues |
+| `best_practices_review` | User wants their config scored against best practices with concrete fixes |
+| `plan_safe_edit` | User describes a change to make — produces a safe step-by-step execution plan |
 | `generate_tracking_plan` | User needs documentation of their tracking setup |
 | `suggest_ga4_setup` | User describes tracking goals and needs a recommendation |
 | `find_gallery_template` | User wants to import a community template (Cookiebot, iubenda, etc.) |
