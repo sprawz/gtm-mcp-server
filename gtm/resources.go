@@ -7,6 +7,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/yosida95/uritemplate/v3"
+
+	"gtm-mcp-server/gtm/bestpractices"
 )
 
 // URI template patterns for GTM resources
@@ -17,6 +19,9 @@ const (
 	uriTags       = "gtm://accounts/{accountId}/containers/{containerId}/workspaces/{workspaceId}/tags"
 	uriTriggers   = "gtm://accounts/{accountId}/containers/{containerId}/workspaces/{workspaceId}/triggers"
 	uriVariables  = "gtm://accounts/{accountId}/containers/{containerId}/workspaces/{workspaceId}/variables"
+
+	uriBestPractices      = "gtm://best-practices"
+	uriBestPracticesTopic = "gtm://best-practices/{topic}"
 )
 
 // Compiled URI templates for extracting parameters
@@ -26,6 +31,8 @@ var (
 	tmplTags       = uritemplate.MustNew(uriTags)
 	tmplTriggers   = uritemplate.MustNew(uriTriggers)
 	tmplVariables  = uritemplate.MustNew(uriVariables)
+
+	tmplBestPracticesTopic = uritemplate.MustNew(uriBestPracticesTopic)
 )
 
 // RegisterResources adds all GTM resource templates to the MCP server.
@@ -77,6 +84,22 @@ func RegisterResources(server *mcp.Server) {
 		MIMEType:    "application/json",
 		URITemplate: uriVariables,
 	}, handleVariablesResource)
+
+	// gtm://best-practices - configuration best-practices index (static, no auth)
+	server.AddResource(&mcp.Resource{
+		Name:        "GTM Best Practices",
+		Description: "Opinionated rules for good GTM configuration: naming, safe edits, GA4/consent, server-side",
+		MIMEType:    "text/markdown",
+		URI:         uriBestPractices,
+	}, handleBestPracticesIndexResource)
+
+	// gtm://best-practices/{topic} - individual best-practices document
+	server.AddResourceTemplate(&mcp.ResourceTemplate{
+		Name:        "GTM Best Practices Topic",
+		Description: "A single best-practices document: naming-organization, safe-edit-workflow, ga4-consent, or server-side",
+		MIMEType:    "text/markdown",
+		URITemplate: uriBestPracticesTopic,
+	}, handleBestPracticesTopicResource)
 }
 
 func handleAccountsResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -205,6 +228,34 @@ func handleTagsResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp
 				MIMEType: "application/json",
 				Text:     string(data),
 			},
+		},
+	}, nil
+}
+
+func handleBestPracticesIndexResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	doc, err := bestpractices.Get("index")
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.ReadResourceResult{
+		Contents: []*mcp.ResourceContents{
+			{URI: req.Params.URI, MIMEType: "text/markdown", Text: doc},
+		},
+	}, nil
+}
+
+func handleBestPracticesTopicResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	match := tmplBestPracticesTopic.Regexp().FindStringSubmatch(req.Params.URI)
+	if len(match) < 2 {
+		return nil, fmt.Errorf("invalid URI: could not extract topic")
+	}
+	doc, err := bestpractices.Get(match[1])
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.ReadResourceResult{
+		Contents: []*mcp.ResourceContents{
+			{URI: req.Params.URI, MIMEType: "text/markdown", Text: doc},
 		},
 	}, nil
 }
