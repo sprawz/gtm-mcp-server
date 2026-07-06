@@ -27,7 +27,13 @@ jobs:
         with:
           repo-checkout: false
       - uses: securego/gosec@v2.27.1
-      - uses: dominikh/staticcheck-action@v1
+      # staticcheck-action's own cache untars go/pkg/mod over modules already
+      # fetched by govulncheck/gosec and fails ("Cannot open: File exists").
+      # Run the binary directly and reuse setup-go's cache instead.
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v3
         env:
