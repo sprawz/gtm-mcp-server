@@ -8,7 +8,7 @@ There are two ways to use it. Pick one:
 | | Option A: Hosted server | Option B: Self-host this fork |
 |---|---|---|
 | Effort | ~2 minutes | ~30–45 minutes one-time |
-| Infrastructure | None (uses `mcp.gtmeditor.com`, run by the upstream author) | Vercel, Cloud Run, or any Docker host |
+| Infrastructure | None (uses `mcp.gtmeditor.com`, run by the upstream author) | Google Cloud Run (or any Docker host) |
 | Where your Google tokens live | Upstream author's server (in memory) | Your own server |
 | Cost | Free | Cloud Run free tier covers light agency use; a small VPS also works |
 
@@ -69,71 +69,61 @@ Done. Skip to [Client access model](#client-access-model).
 
 ### Step 2 — Deploy
 
-#### Path 1: Vercel (runs the fork's `Dockerfile.vercel` on Fluid compute)
+#### Path 1: Google Cloud Run (recommended)
 
-This fork adds a Redis-backed token store so OAuth sessions survive Vercel's
-scale-to-zero and instance churn. You need a Redis database — Upstash's free
-tier via the Vercel Marketplace is plenty.
-
-1. **Create the Redis database:** Vercel Dashboard → **Storage** → **Create
-   Database** → **Upstash for Redis** (or any Redis provider). Copy the
-   connection URL — it looks like `rediss://default:...@...upstash.io:6379`.
-2. **Import the repo:** Vercel Dashboard → **Add New → Project** → import
-   `pattitudez/gtm-mcp-server`. Vercel detects `Dockerfile.vercel` at the
-   root and builds it as a container function — no framework preset needed.
-3. **Set environment variables** (Project → Settings → Environment Variables):
-   ```
-   PORT=8080
-   GOOGLE_CLIENT_ID=your-id.apps.googleusercontent.com
-   GOOGLE_CLIENT_SECRET=your-secret
-   REDIS_URL=rediss://default:...@...upstash.io:6379
-   BASE_URL=https://your-project.vercel.app
-   ```
-   `PORT=8080` is required — it tells Vercel which port the container
-   listens on. For `BASE_URL`, use your production domain (either the
-   `*.vercel.app` domain or a custom domain you attach).
-4. **Deploy** (push to the repo's default branch, or `vercel deploy --prod`),
-   then set the third OAuth redirect URI in Google Cloud Console to
-   `https://your-project.vercel.app/oauth/callback` (match your real domain).
-
-Notes:
-- Production instances sleep after ~5 minutes idle — with Redis configured
-  that's invisible: your sign-in survives and the next request just cold-starts.
-- Startup verifies the Redis connection; if a deploy fails, check the
-  runtime logs for `redis ping failed` (wrong URL or missing `rediss://`).
-- Preview deployments get different URLs that won't match `BASE_URL` or the
-  OAuth redirect URI — connect Claude to the production domain only.
-
-#### Path 2: Google Cloud Run (no code-config beyond env vars, HTTPS included)
+Cloud Run builds the repo's Dockerfile, gives you an HTTPS URL, and scales
+to zero. One prerequisite: the [gcloud CLI](https://cloud.google.com/sdk/docs/install),
+authenticated against the same project where you enabled the Tag Manager API:
 
 ```bash
-# From the repo root, first deploy (BASE_URL is a placeholder for now):
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+**Deploy with the helper script** (automates the BASE_URL bootstrap — Cloud
+Run only assigns your URL after the first deploy, so it deploys, reads the
+URL back, and re-applies it as BASE_URL):
+
+```bash
+cp .env.example .env    # fill in GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
+./deploy/cloudrun.sh
+```
+
+The script prints the redirect URI to add to your OAuth client when it
+finishes. Re-run it any time to ship updates — it only does the URL
+bootstrap dance on first deploy.
+
+**Or run the equivalent by hand:**
+
+```bash
 gcloud run deploy gtm-mcp \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars "GOOGLE_CLIENT_ID=your-id.apps.googleusercontent.com,GOOGLE_CLIENT_SECRET=your-secret,BASE_URL=https://placeholder"
 
-# Grab the URL Cloud Run assigned (e.g. https://gtm-mcp-xxxxx-uc.a.run.app):
-gcloud run services describe gtm-mcp --region us-central1 --format 'value(status.url)'
-
-# Set BASE_URL to that real URL:
-gcloud run services update gtm-mcp --region us-central1 \
-  --set-env-vars "BASE_URL=https://gtm-mcp-xxxxx-uc.a.run.app"
+URL=$(gcloud run services describe gtm-mcp --region us-central1 --format 'value(status.url)')
+gcloud run services update gtm-mcp --region us-central1 --update-env-vars "BASE_URL=$URL"
+echo "Add this redirect URI to your OAuth client: $URL/oauth/callback"
 ```
 
-Then go back to your OAuth client in Google Cloud Console and set the third
-redirect URI to `https://gtm-mcp-xxxxx-uc.a.run.app/oauth/callback`.
+**Staying signed in across cold starts.** By default tokens live in server
+memory, and Cloud Run replaces instances whenever it feels like it — each
+time, Claude's connector needs a re-login. Two fixes, pick one:
+
+- `REDIS_URL` (free): create a free Redis database (e.g.
+  [Upstash](https://upstash.com)) and add `REDIS_URL=rediss://...` to the
+  service env vars (the script passes it automatically if it's in `.env`).
+  Sessions then survive restarts and redeploys entirely.
+- `--min-instances 1` (~a few $/month): keeps one instance warm. Simpler,
+  but sessions still reset on every deploy.
 
 Notes:
 - For production hygiene, move the client secret to Secret Manager
   (`--set-secrets` instead of `--set-env-vars`).
-- Without `REDIS_URL`, tokens are stored **in memory**, so a new revision or
-  cold start means reconnecting the connector in Claude. Either set
-  `--min-instances 1` (small always-on cost) or add a `REDIS_URL` env var
-  like the Vercel path.
+- Cold starts on this small Go image are ~1 second — fine for MCP use.
 
-#### Path 3: Docker on a VPS you already run
+#### Path 2: Docker on a VPS you already run
 
 ```bash
 git clone https://github.com/pattitudez/gtm-mcp-server.git
