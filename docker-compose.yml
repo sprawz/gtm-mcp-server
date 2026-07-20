@@ -1,0 +1,40 @@
+services:
+  gtm-mcp:
+    build: .
+    container_name: gtm-mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Caddy fronts the server, so trust X-Forwarded-For for rate limiting
+      TRUST_PROXY: "true"
+    expose:
+      - "8080"
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: gtm-mcp-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Copy Caddyfile.example to Caddyfile and set your domain first
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - web
+
+networks:
+  web:
+
+volumes:
+  caddy_data:
+  caddy_config:

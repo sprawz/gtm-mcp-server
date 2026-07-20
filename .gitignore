@@ -5,6 +5,9 @@ go-sdk-main/
 .env.deploy
 !README.md
 !ARCHITECTURE.md
+!SETUP.md
+!.env.example
+!Caddyfile.example
 !skills/**/*.md
 !gtm/bestpractices/docs/*.md
 .env.local
@@ -24,7 +27,7 @@ gtm-mcp-server
 # Deployment
 deploy.sh
 Caddyfile
-docker-compose.yml
+!docker-compose.yml
 
 # Swap files
 *.swp

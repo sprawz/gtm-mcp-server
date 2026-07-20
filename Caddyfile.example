@@ -1,0 +1,9 @@
+# Copy to Caddyfile and replace with your real domain:
+#   cp Caddyfile.example Caddyfile
+#
+# Point a DNS A record for this domain at your server first —
+# Caddy provisions and renews the HTTPS certificate automatically.
+
+gtm-mcp.yourdomain.com {
+	reverse_proxy gtm-mcp:8080
+}
