@@ -1,5 +1,7 @@
 # GTM MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/pulsemcp%2Fpaolobietolini-gtm-editor.svg)](https://mcptoplist.com/server/pulsemcp%2Fpaolobietolini-gtm-editor)
+
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![MCP](https://img.shields.io/badge/MCP-Model_Context_Protocol-8A2BE2)](https://modelcontextprotocol.io)
