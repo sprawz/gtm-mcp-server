@@ -70,3 +70,49 @@ func TestMemoryTokenStore_Cleanup_RemovesExpiredAuthCodeToken(t *testing.T) {
 		t.Errorf("expected expired auth-code token to be purged, got %v", err)
 	}
 }
+
+// An entry carrying a refresh token but no recorded refresh window has no
+// expiry to check against, so treating it as refreshable would keep it — and
+// keep it resolvable through GetTokenByRefresh — for the process lifetime. No
+// current caller stores that shape; the guard is for the next one.
+func TestMemoryTokenStore_Cleanup_RemovesTokenWithNoRefreshWindow(t *testing.T) {
+	store := NewMemoryTokenStore()
+	defer store.Close()
+
+	now := time.Now()
+	store.StoreToken(&TokenInfo{
+		AccessToken:  "access-3",
+		RefreshToken: "refresh-3",
+		ExpiresAt:    now.Add(-2 * time.Hour),
+		// RefreshExpiresAt deliberately left zero
+		CreatedAt: now.Add(-10 * time.Hour),
+	})
+
+	store.purgeExpired(now)
+
+	if _, err := store.GetTokenByRefresh("refresh-3"); err != ErrTokenNotFound {
+		t.Errorf("expected token with no refresh window to be purged, got %v", err)
+	}
+}
+
+// The access token stays usable until its own expiry, so an entry whose
+// refresh window has lapsed must not be yanked out from under a live session.
+func TestMemoryTokenStore_Cleanup_KeepsLiveAccessAfterRefreshLapses(t *testing.T) {
+	store := NewMemoryTokenStore()
+	defer store.Close()
+
+	now := time.Now()
+	store.StoreToken(&TokenInfo{
+		AccessToken:      "access-4",
+		RefreshToken:     "refresh-4",
+		ExpiresAt:        now.Add(1 * time.Hour),  // still valid
+		RefreshExpiresAt: now.Add(-1 * time.Hour), // refresh window lapsed
+		CreatedAt:        now.Add(-30 * 24 * time.Hour),
+	})
+
+	store.purgeExpired(now)
+
+	if _, err := store.GetTokenByAccess("access-4"); err != nil {
+		t.Errorf("live access token was purged with its lapsed refresh window: %v", err)
+	}
+}

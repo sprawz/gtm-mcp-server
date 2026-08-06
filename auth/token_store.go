@@ -336,13 +336,16 @@ func (s *MemoryTokenStore) purgeExpired(now time.Time) {
 
 	for accessToken, info := range s.tokens {
 		accessExpired := now.After(info.ExpiresAt.Add(1 * time.Hour))
-		refreshExpired := !info.RefreshExpiresAt.IsZero() && now.After(info.RefreshExpiresAt)
-		// A token whose refresh token is still valid can mint new access
+		// A token whose refresh window is still open can mint new access
 		// tokens, so keep it — purging on access expiry alone would force a
-		// needless re-authentication. Drop a token only once its refresh
-		// window has lapsed, or (for short-lived auth-code tokens that have no
-		// refresh token) once its access has expired.
-		if refreshExpired || (accessExpired && info.RefreshToken == "") {
+		// needless re-authentication. An entry with a refresh token but no
+		// recorded window counts as not refreshable rather than as refreshable
+		// forever, so a caller that forgets the field cannot pin an entry here
+		// for the process lifetime.
+		refreshable := info.RefreshToken != "" &&
+			!info.RefreshExpiresAt.IsZero() &&
+			now.Before(info.RefreshExpiresAt)
+		if accessExpired && !refreshable {
 			delete(s.refreshIndex, info.RefreshToken)
 			delete(s.tokens, accessToken)
 		}
