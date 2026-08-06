@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -160,5 +163,87 @@ func TestFileTokenStore_PrunesExpiredRefreshOnLoad(t *testing.T) {
 
 	if _, err := reopened.GetTokenByAccessIncludeExpired("access-dead"); err != ErrTokenNotFound {
 		t.Errorf("expected expired-refresh token to be pruned on load, got %v", err)
+	}
+}
+
+// Persisting marshals a snapshot outside the store lock while other requests
+// mutate the same entries in place, so the snapshot has to be a copy. Run
+// under -race, this fails if the snapshot aliases the stored structs.
+func TestFileTokenStore_ConcurrentPersistAndMutation(t *testing.T) {
+	store, _ := newTestFileStore(t)
+	defer store.Close()
+
+	if err := store.StoreToken(sampleToken("access-1", "refresh-1")); err != nil {
+		t.Fatalf("StoreToken failed: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for n := 0; n < 25; n++ {
+				if err := store.ExtendTokenExpiry("access-1", time.Now().Add(time.Duration(n)*time.Minute)); err != nil {
+					t.Errorf("ExtendTokenExpiry failed: %v", err)
+					return
+				}
+				if err := store.StoreToken(sampleToken(fmt.Sprintf("access-%d-%d", i, n), "")); err != nil {
+					t.Errorf("StoreToken failed: %v", err)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// os.WriteFile follows symlinks, so a fixed "<path>.tmp" would let anyone who
+// can create files in the directory siphon every refresh token elsewhere.
+func TestFileTokenStore_DoesNotWriteThroughPlantedTempSymlink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+	target := filepath.Join(dir, "attacker-readable")
+	if err := os.WriteFile(target, []byte("untouched"), 0o644); err != nil {
+		t.Fatalf("seeding target failed: %v", err)
+	}
+	if err := os.Symlink(target, path+".tmp"); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	store, err := NewFileTokenStore(path, testLogger())
+	if err != nil {
+		t.Fatalf("NewFileTokenStore failed: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.StoreToken(sampleToken("access-1", "refresh-1")); err != nil {
+		t.Fatalf("StoreToken failed: %v", err)
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("reading target failed: %v", err)
+	}
+	if string(got) != "untouched" {
+		t.Errorf("tokens were written through the planted symlink: %s", got)
+	}
+}
+
+// A revocation that never reaches disk is valid again after a restart, so
+// unlike the other paths DeleteToken must not swallow a persist failure.
+func TestFileTokenStore_DeleteReportsPersistFailure(t *testing.T) {
+	store, path := newTestFileStore(t)
+	defer store.Close()
+
+	if err := store.StoreToken(sampleToken("access-1", "refresh-1")); err != nil {
+		t.Fatalf("StoreToken failed: %v", err)
+	}
+	// Remove the directory out from under the store so the write cannot land.
+	if err := os.RemoveAll(filepath.Dir(path)); err != nil {
+		t.Fatalf("removing store dir failed: %v", err)
+	}
+
+	if err := store.DeleteToken("access-1"); err == nil {
+		t.Error("expected DeleteToken to report the persist failure")
 	}
 }

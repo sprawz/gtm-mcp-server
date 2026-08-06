@@ -59,7 +59,7 @@ func (f *FileTokenStore) StoreToken(info *TokenInfo) error {
 	if err := f.MemoryTokenStore.StoreToken(info); err != nil {
 		return err
 	}
-	f.persist()
+	f.persistBestEffort()
 	return nil
 }
 
@@ -68,7 +68,14 @@ func (f *FileTokenStore) DeleteToken(accessToken string) error {
 	if err := f.MemoryTokenStore.DeleteToken(accessToken); err != nil {
 		return err
 	}
-	f.persist()
+	// A revoked token that stays on disk is valid again after a restart, so
+	// this is the one path where a persist failure must reach the caller.
+	if err := f.persist(); err != nil {
+		if f.logger != nil {
+			f.logger.Error("failed to persist token revocation", "error", err, "path", f.path)
+		}
+		return err
+	}
 	return nil
 }
 
@@ -77,7 +84,7 @@ func (f *FileTokenStore) UpdateGoogleToken(accessToken string, googleToken *oaut
 	if err := f.MemoryTokenStore.UpdateGoogleToken(accessToken, googleToken); err != nil {
 		return err
 	}
-	f.persist()
+	f.persistBestEffort()
 	return nil
 }
 
@@ -86,7 +93,7 @@ func (f *FileTokenStore) ExtendTokenExpiry(accessToken string, newExpiry time.Ti
 	if err := f.MemoryTokenStore.ExtendTokenExpiry(accessToken, newExpiry); err != nil {
 		return err
 	}
-	f.persist()
+	f.persistBestEffort()
 	return nil
 }
 
@@ -132,10 +139,12 @@ func (f *FileTokenStore) load() error {
 	return nil
 }
 
-// persist writes a snapshot of the current tokens to disk. It is best-effort:
-// a write failure is logged but does not fail the originating request, since
-// the in-memory state is still correct for the running process.
-func (f *FileTokenStore) persist() {
+// persist writes a snapshot of the current tokens to disk, returning the first
+// error it hits. Callers that only add or update state treat it as best-effort
+// — the in-memory state is still correct for the running process — but a
+// revocation that is not on disk would come back to life on restart, so
+// DeleteToken surfaces the failure.
+func (f *FileTokenStore) persist() error {
 	f.saveMu.Lock()
 	defer f.saveMu.Unlock()
 
@@ -143,38 +152,64 @@ func (f *FileTokenStore) persist() {
 
 	data, err := json.Marshal(state)
 	if err != nil {
-		if f.logger != nil {
-			f.logger.Warn("failed to marshal token store", "error", err)
-		}
-		return
+		return fmt.Errorf("failed to marshal token store: %w", err)
 	}
 
 	// Atomic write: write to a temp file then rename, so a crash mid-write
-	// cannot corrupt the existing file.
-	tmp := f.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		if f.logger != nil {
-			f.logger.Warn("failed to write token store", "error", err, "path", tmp)
-		}
-		return
+	// cannot corrupt the existing file. The temp file is created exclusively
+	// with a random name rather than reusing a predictable path: os.WriteFile
+	// follows symlinks, so a pre-planted <path>.tmp link would siphon every
+	// refresh token to a location of the attacker's choosing.
+	tmp, err := os.CreateTemp(filepath.Dir(f.path), filepath.Base(f.path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create token store temp file: %w", err)
 	}
-	if err := os.Rename(tmp, f.path); err != nil {
-		if f.logger != nil {
-			f.logger.Warn("failed to rename token store", "error", err, "path", f.path)
-		}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once the rename below succeeds
+
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to set token store permissions: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to write token store: %w", err)
+	}
+	// Flush before the rename, or a power loss can leave a truncated file at
+	// the final path — the corruption the atomic write exists to prevent.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to flush token store: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close token store: %w", err)
+	}
+	if err := os.Rename(tmpName, f.path); err != nil {
+		return fmt.Errorf("failed to rename token store: %w", err)
+	}
+	return nil
+}
+
+// persistBestEffort records a persist failure without failing the originating
+// request.
+func (f *FileTokenStore) persistBestEffort() {
+	if err := f.persist(); err != nil && f.logger != nil {
+		f.logger.Warn("failed to persist token store", "error", err, "path", f.path)
 	}
 }
 
-// snapshot returns the current tokens under the read lock. Holding the lock for
-// the duration of the copy prevents a concurrent-map-iteration panic against
-// writers; marshalling happens after the lock is released in persist.
+// snapshot returns a copy of the current tokens under the read lock. The
+// entries must be cloned, not aliased: marshalling happens after the lock is
+// released, while ExtendTokenExpiry and UpdateGoogleToken mutate the stored
+// structs in place, so sharing the pointers would race and could serialise a
+// torn ExpiresAt as the authoritative expiry.
 func (f *FileTokenStore) snapshot() []*TokenInfo {
 	f.MemoryTokenStore.mu.RLock()
 	defer f.MemoryTokenStore.mu.RUnlock()
 
 	out := make([]*TokenInfo, 0, len(f.MemoryTokenStore.tokens))
 	for _, info := range f.MemoryTokenStore.tokens {
-		out = append(out, info)
+		out = append(out, cloneTokenInfo(info))
 	}
 	return out
 }
