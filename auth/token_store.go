@@ -315,49 +315,57 @@ func (s *MemoryTokenStore) cleanup(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	const maxClients = 1000
-
 	for {
 		select {
 		case <-ticker.C:
-			now := time.Now()
-
-			// Delete directly under write lock to avoid race conditions
-			// between collecting expired keys and deleting them.
-			s.mu.Lock()
-			for accessToken, info := range s.tokens {
-				accessExpired := now.After(info.ExpiresAt.Add(1 * time.Hour))
-				refreshExpired := !info.RefreshExpiresAt.IsZero() && now.After(info.RefreshExpiresAt)
-				if accessExpired || refreshExpired {
-					delete(s.refreshIndex, info.RefreshToken)
-					delete(s.tokens, accessToken)
-				}
-			}
-			for stateValue, state := range s.states {
-				if now.Sub(state.CreatedAt) > 10*time.Minute {
-					delete(s.states, stateValue)
-				}
-			}
-			// Evict oldest clients until back under limit
-			for len(s.clients) > maxClients {
-				var oldest string
-				var oldestTime time.Time
-				for id, client := range s.clients {
-					if oldest == "" || client.CreatedAt.Before(oldestTime) {
-						oldest = id
-						oldestTime = client.CreatedAt
-					}
-				}
-				if oldest != "" {
-					delete(s.clients, oldest)
-				} else {
-					break
-				}
-			}
-			s.mu.Unlock()
+			s.purgeExpired(time.Now())
 
 		case <-ctx.Done():
 			return
+		}
+	}
+}
+
+// purgeExpired removes expired tokens and states, and evicts stale clients.
+// It runs under the write lock to avoid races between collecting and deleting.
+func (s *MemoryTokenStore) purgeExpired(now time.Time) {
+	const maxClients = 1000
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for accessToken, info := range s.tokens {
+		accessExpired := now.After(info.ExpiresAt.Add(1 * time.Hour))
+		refreshExpired := !info.RefreshExpiresAt.IsZero() && now.After(info.RefreshExpiresAt)
+		// A token whose refresh token is still valid can mint new access
+		// tokens, so keep it — purging on access expiry alone would force a
+		// needless re-authentication. Drop a token only once its refresh
+		// window has lapsed, or (for short-lived auth-code tokens that have no
+		// refresh token) once its access has expired.
+		if refreshExpired || (accessExpired && info.RefreshToken == "") {
+			delete(s.refreshIndex, info.RefreshToken)
+			delete(s.tokens, accessToken)
+		}
+	}
+	for stateValue, state := range s.states {
+		if now.Sub(state.CreatedAt) > 10*time.Minute {
+			delete(s.states, stateValue)
+		}
+	}
+	// Evict oldest clients until back under limit
+	for len(s.clients) > maxClients {
+		var oldest string
+		var oldestTime time.Time
+		for id, client := range s.clients {
+			if oldest == "" || client.CreatedAt.Before(oldestTime) {
+				oldest = id
+				oldestTime = client.CreatedAt
+			}
+		}
+		if oldest != "" {
+			delete(s.clients, oldest)
+		} else {
+			break
 		}
 	}
 }
