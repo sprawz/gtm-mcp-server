@@ -14,6 +14,7 @@ import (
 
 	"gtm-mcp-server/auth"
 	"gtm-mcp-server/config"
+	"gtm-mcp-server/dashboard"
 	"gtm-mcp-server/gtm"
 	"gtm-mcp-server/middleware"
 
@@ -219,6 +220,14 @@ func main() {
 
 		// Truly open — no auth at all (local dev only)
 		mux.Handle("/", maxBytesHandler(5<<20, mcpHandler))
+	}
+
+	if cfg.DashboardEnabled {
+		mux.Handle("/dashboard/", dashboard.NewHandler(dashboard.Status{
+			Endpoint: cfg.BaseURL, Version: serverVersion,
+			OAuthConfigured:          cfg.ValidateAuth() == nil,
+			ServiceAccountConfigured: saTokenSource != nil,
+		}))
 	}
 
 	// Create HTTP server

@@ -15,6 +15,8 @@ type Config struct {
 	// Server configuration
 	Port    int
 	BaseURL string
+	// DashboardEnabled exposes a public setup page with configuration status only.
+	DashboardEnabled bool
 
 	// Google OAuth configuration
 	GoogleClientID     string
@@ -63,6 +65,7 @@ func Load() (*Config, error) {
 	_ = godotenv.Overload(".env.local")
 
 	cfg := &Config{
+		DashboardEnabled:      getEnvBool("DASHBOARD_ENABLED", false),
 		Port:                  getEnvInt("PORT", 8080),
 		BaseURL:               getEnv("BASE_URL", "http://localhost:8080"),
 		GoogleClientID:        getEnv("GOOGLE_CLIENT_ID", ""),

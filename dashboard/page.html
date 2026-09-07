@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GTM MCP · Connection setup</title><link rel="stylesheet" href="/dashboard/style.css"></head>
+<body><div class="shell">
+<header><a class="brand" href="/dashboard/"><span class="mark">G</span> GTM MCP</a><span class="version">{{.Version}}</span></header>
+<main><p class="eyebrow">CONNECTION SETUP</p><h1>Your GTM tools.<br>A clear place to start.</h1><p class="intro">Connect your AI assistant to Google Tag Manager and check how this server is configured.</p>
+<section class="endpoint"><div><p class="eyebrow">MCP SERVER URL</p><code>{{.Endpoint}}</code></div><span class="badge">HTTP</span></section>
+<div class="grid"><section class="card"><p class="eyebrow">GOOGLE SIGN-IN</p>
+{{if .OAuthConfigured}}<h2><span class="dot ready"></span>OAuth configured</h2><p>Add the server URL to your MCP client, then choose its sign-in option. Complete Google consent in the browser.</p><p class="note">The callback page is the return destination after sign-in. Start from your MCP client.</p>
+{{else}}<h2><span class="dot waiting"></span>Setup needed</h2><p>Google sign-in is not available on this server yet.</p><p class="note">The operator must configure <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code>, register the Google callback URL, and restart the server.</p>{{end}}</section>
+<section class="card"><p class="eyebrow">SERVICE ACCOUNT</p>
+{{if .ServiceAccountConfigured}}<h2><span class="dot ready"></span>API key configured</h2><p>Use your server API key as the bearer credential in your MCP client. This connection uses the server's service account.</p>
+{{else}}<h2><span class="dot"></span>Not configured</h2><p>A service account is optional. When Google sign-in is configured, you can connect using your own Google account.</p>{{end}}</section></div>
+{{if and (not .OAuthConfigured) (not .ServiceAccountConfigured)}}<aside><strong>No authentication configured.</strong> Basic MCP connectivity is available, but authenticated GTM operations need Google OAuth or a service account. Configure authentication before exposing the server publicly.</aside>{{end}}
+<section class="steps"><h2>Check your connection</h2><ol><li><strong>Add the server</strong><span>Use the MCP URL above in your assistant's connection settings.</span></li><li><strong>Authenticate</strong><span>Complete Google sign-in or supply your server API key.</span></li><li><strong>Try a read</strong><span>Ask the assistant to check authentication and list your GTM accounts.</span></li></ol></section>
+<p class="footnote">This page shows server configuration. It does not verify your Google session or access to a particular container.</p>
+</main><footer><span>GTM MCP · Connection setup</span><a href="/health">Server health →</a></footer></div></body></html>

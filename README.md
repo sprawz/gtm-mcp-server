@@ -613,6 +613,18 @@ limit.
 The server writes the log event `auth_auto_refresh_capped` for each refusal.
 The event contains the client ID and the age of the refused sequence.
 
+### Optional setup dashboard
+
+Set `DASHBOARD_ENABLED=true` and restart the server to enable `/dashboard/`.
+The page shows the MCP endpoint, OAuth/service-account configuration, and
+connection instructions. It is disabled by default.
+
+This is a public setup page when enabled. It exposes configuration booleans and
+the server version, but no tokens, sessions, account names, or GTM data. It does
+not verify the current user's Google authentication. Session management,
+activity history, and operational metrics remain planned in
+[the dashboard roadmap](planning/dashboard.md).
+
 ### Google Cloud Setup
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
