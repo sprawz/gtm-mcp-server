@@ -1,6 +1,7 @@
 .env
 .env.*
 .git/
+tmp/
 go-sdk-main/
 deploy.sh
 Caddyfile

@@ -184,6 +184,12 @@ func (f *CIMDFetcher) Fetch(ctx context.Context, clientID string) (*ClientInfo, 
 		return nil, fmt.Errorf("client metadata missing required field redirect_uris")
 	}
 
+	for _, uri := range doc.RedirectURIs {
+		if !isValidRedirectURI(uri) {
+			return nil, fmt.Errorf("client metadata contains an invalid redirect_uri")
+		}
+	}
+
 	client := &ClientInfo{
 		ClientID:     doc.ClientID,
 		ClientName:   doc.ClientName,

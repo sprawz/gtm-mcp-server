@@ -18,6 +18,9 @@ go-sdk-main/
 # Build artifacts
 dist/
 
+# Local test credentials and scratch files
+/tmp/
+
 # Binary
 gtm-mcp-server
 

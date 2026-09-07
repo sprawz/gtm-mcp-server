@@ -88,6 +88,12 @@ func (m *mockTokenStore) GetClient(clientID string) (*ClientInfo, error) {
 }
 func (m *mockTokenStore) DeleteClient(clientID string) error { return nil }
 
+func (m *mockTokenStore) RotateToken(string, *TokenInfo) error            { return ErrTokenNotFound }
+func (m *mockTokenStore) StoreAuthorizationCode(*AuthorizationCode) error { return nil }
+func (m *mockTokenStore) ConsumeAuthorizationCode(string) (*AuthorizationCode, error) {
+	return nil, ErrInvalidState
+}
+
 // mockGoogleProvider wraps GoogleProvider for testing. Since GoogleProvider
 // is a concrete struct, we test the middleware with a real GoogleProvider
 // that's configured to hit a test server.
