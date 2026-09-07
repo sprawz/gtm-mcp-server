@@ -86,12 +86,31 @@ func (rl *RateLimiter) cleanup() {
 }
 
 // extractClientIP returns the client IP from the request.
-// When trustProxy is true, the leftmost IP from X-Forwarded-For (set by reverse proxy) is used.
+// When trustProxy is true, the rightmost IP from X-Forwarded-For is used.
 // When false, only RemoteAddr is used to prevent spoofing.
+//
+// The rightmost entry, not the leftmost: a reverse proxy appends the peer
+// address to whatever X-Forwarded-For the client already sent (nginx's
+// $proxy_add_x_forwarded_for), so every entry left of the last one is
+// attacker-controlled. Keying on one would let a client send a fresh value per
+// request and get a fresh bucket each time, defeating the limit entirely. The
+// last entry is the one our own proxy wrote.
+//
+// This assumes exactly one trusted proxy hop in front of the server, which is
+// the deployment. A second proxy would mean skipping that many entries.
 func extractClientIP(r *http.Request, trustProxy bool) string {
 	if trustProxy {
-		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			return strings.TrimSpace(strings.SplitN(forwarded, ",", 2)[0])
+		// Joining the header lines rather than reading the first one: a proxy
+		// that appends a line instead of rewriting one leaves the client's own
+		// line first, and RFC 7230 makes repeated field lines equivalent to
+		// one comma-joined line anyway.
+		if forwarded := strings.Join(r.Header.Values("X-Forwarded-For"), ","); forwarded != "" {
+			hops := strings.Split(forwarded, ",")
+			for i := len(hops) - 1; i >= 0; i-- {
+				if hop := strings.TrimSpace(hops[i]); hop != "" {
+					return hop
+				}
+			}
 		}
 	}
 	// RemoteAddr is "ip:port"; strip the port so limiting is per-IP,

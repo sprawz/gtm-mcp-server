@@ -82,7 +82,7 @@ bestpractices/   → go:embed'd markdown rule docs (naming, safe edits, GA4/cons
 **autoEventFilter remapping:** The GTM API silently drops `autoEventFilter` for `linkClick`/`click`/`formSubmission` triggers. `mutations.go` owns the remapping to `filter` — tool handlers don't duplicate this logic.
 
 ### `middleware/`
-- **Rate limiting.** Per-IP token bucket (`golang.org/x/time/rate`). When `TRUST_PROXY=true`, uses `X-Forwarded-For` for client IP; otherwise uses `RemoteAddr` only to prevent spoofing.
+- **Rate limiting.** Per-IP token bucket (`golang.org/x/time/rate`). When `TRUST_PROXY=true`, uses the **rightmost** `X-Forwarded-For` entry for client IP (the one the proxy appended; entries left of it are client-supplied and spoofable); otherwise uses `RemoteAddr` only to prevent spoofing.
 - **Logging.** Structured JSON logs for MCP request/response.
 
 ## Request Lifecycle
