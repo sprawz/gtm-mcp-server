@@ -621,9 +621,8 @@ connection instructions. It is disabled by default.
 
 This is a public setup page when enabled. It exposes configuration booleans and
 the server version, but no tokens, sessions, account names, or GTM data. It does
-not verify the current user's Google authentication. Session management,
-activity history, and operational metrics remain planned in
-[the dashboard roadmap](planning/dashboard.md).
+not verify the current user's Google authentication. Session management, activity history, and operational metrics are planned
+for later work.
 
 ### Google Cloud Setup
 
