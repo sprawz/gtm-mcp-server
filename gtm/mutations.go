@@ -196,25 +196,39 @@ func (c *Client) UpdateTrigger(ctx context.Context, path string, input *TriggerI
 		autoEventFilterInput = nil
 	}
 
-	// Preserve existing fields when not provided in input
+	// Preserve omitted fields; a non-nil empty slice explicitly clears a field.
+	var forceSendFields []string
 	filter := toAPIConditions(filterInput)
-	if filter == nil {
+	if filterInput == nil {
 		filter = current.Filter
+	} else if len(filterInput) == 0 {
+		filter = []*tagmanager.Condition{}
+		forceSendFields = append(forceSendFields, "Filter")
 	}
 	autoEventFilter := toAPIConditions(autoEventFilterInput)
-	if autoEventFilter == nil {
+	if autoEventFilterInput == nil {
 		autoEventFilter = current.AutoEventFilter
+	} else if len(autoEventFilterInput) == 0 {
+		autoEventFilter = []*tagmanager.Condition{}
+		forceSendFields = append(forceSendFields, "AutoEventFilter")
 	}
 	customEventFilter := toAPIConditions(input.CustomEventFilter)
-	if customEventFilter == nil {
+	if input.CustomEventFilter == nil {
 		customEventFilter = current.CustomEventFilter
+	} else if len(input.CustomEventFilter) == 0 {
+		customEventFilter = []*tagmanager.Condition{}
+		forceSendFields = append(forceSendFields, "CustomEventFilter")
 	}
 	params := toAPIParams(input.Parameter)
-	if params == nil {
+	if input.Parameter == nil {
 		params = current.Parameter
+	} else if len(input.Parameter) == 0 {
+		params = []*tagmanager.Parameter{}
+		forceSendFields = append(forceSendFields, "Parameter")
 	}
 
 	trigger := &tagmanager.Trigger{
+		ForceSendFields:   forceSendFields,
 		Name:              input.Name,
 		Type:              input.Type,
 		Filter:            filter,

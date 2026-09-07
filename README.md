@@ -675,6 +675,15 @@ The event contains the client ID and the age of the refused sequence.
 | `enable_built_in_variables` | Enables built-in variable types in a workspace |
 | `disable_built_in_variables` | Disables built-in variable types. Asks for approval |
 
+### Clearing trigger conditions
+
+For `update_trigger`, omit `filterJson`, `customEventFilterJson`,
+`autoEventFilterJson`, or `parameterJson` to preserve that field. Pass the JSON
+string `"[]"` to clear it, or a non-empty JSON array to replace it. Previously,
+`"[]"` silently preserved existing values; clients that send placeholder empty
+arrays should omit those fields instead. For click, link-click, and form
+triggers, use `filterJson` because GTM ignores `autoEventFilter`.
+
 ### Server-Side Container Tools
 
 | Tool | Description |
