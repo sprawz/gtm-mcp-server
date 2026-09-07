@@ -68,7 +68,7 @@ func main() {
 	// inject a token source at auth.SATokenSourceKey via receiving middleware
 	// and call server.Run(ctx, &mcp.StdioTransport{}) instead of serving HTTP.
 	// getClient() already resolves credentials from the context, so no tool
-	// changes are needed. See planning/stdio-transport.md.
+	// changes are needed.
 	// Create HTTP handler for MCP
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return server

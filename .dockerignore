@@ -9,3 +9,6 @@ docker-compose.yml
 *.md
 *.swp
 *.swo
+
+# Local planning documents
+planning/
