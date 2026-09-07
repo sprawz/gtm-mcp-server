@@ -130,6 +130,14 @@ func (s *Server) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bind this flow to the browser that started it (see statebinding.go).
+	binding, err := GenerateToken(32)
+	if err != nil {
+		s.logger.Error("failed to generate state binding", "error", err)
+		s.errorResponse(w, "server_error", "Internal server error")
+		return
+	}
+
 	// Store the auth state for later verification
 	authState := &AuthState{
 		State:        googleState,
@@ -138,6 +146,7 @@ func (s *Server) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 		ClientID:     clientID,
 		Resource:     resource, // Store resource for audience binding
 		Issuer:       s.issuerForRequest(r),
+		BindingHash:  hashBinding(binding),
 		CreatedAt:    time.Now(),
 	}
 
@@ -149,6 +158,8 @@ func (s *Server) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 		s.errorResponse(w, "server_error", "Internal server error")
 		return
 	}
+
+	setBindingCookie(w, binding, s.bindingRegimeIsHTTPS(authState.Issuer))
 
 	// Redirect to Google OAuth
 	googleAuthURL := s.google.AuthCodeURL(authState.State)
@@ -196,6 +207,19 @@ func (s *Server) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 	authState, err := s.store.ConsumeState(combinedState)
 	if err != nil {
 		s.logger.Error("failed to get state", "error", err)
+		s.errorResponse(w, "invalid_request", "Invalid or expired state")
+		return
+	}
+
+	// The browser that completed Google consent must be the one that started
+	// the flow, or an attacker can have a victim's code minted against their
+	// own registered redirect_uri. Checked before the code is spent.
+	binding := bindingFromRequest(r, s.bindingRegimeIsHTTPS(authState.Issuer))
+	if !bindingMatches(binding, authState.BindingHash) {
+		s.logger.Error("federation state binding mismatch",
+			"client_id", authState.ClientID,
+			"has_cookie", binding != "",
+		)
 		s.errorResponse(w, "invalid_request", "Invalid or expired state")
 		return
 	}

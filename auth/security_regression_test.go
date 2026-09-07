@@ -241,11 +241,13 @@ func TestSecurityCallbackHTML(t *testing.T) {
 			defer m.Close()
 			s := securityServer(t, m)
 			// Exercise the render boundary even if a stale/injected state bypasses authorize validation.
-			if err := m.StoreState(&AuthState{State: "google|client", RedirectURI: redirect, CreatedAt: time.Now()}); err != nil {
+			if err := m.StoreState(&AuthState{State: "google|client", RedirectURI: redirect, BindingHash: hashBinding("test-browser-binding"), CreatedAt: time.Now()}); err != nil {
 				t.Fatal(err)
 			}
 			w := httptest.NewRecorder()
-			s.CallbackHandler(w, httptest.NewRequest("GET", "/oauth/callback?code=google-code&state=google%7Cclient", nil))
+			req := httptest.NewRequest("GET", "/oauth/callback?code=google-code&state=google%7Cclient", nil)
+			req.AddCookie(&http.Cookie{Name: bindingCookieNameFor(s.bindingRegimeIsHTTPS("")), Value: "test-browser-binding"})
+			s.CallbackHandler(w, req)
 			if w.Code == http.StatusBadRequest && strings.Contains(redirect, "://") == false {
 				return
 			}

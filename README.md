@@ -508,6 +508,11 @@ TRUST_PROXY=true
 The Docker Compose configuration sets this variable automatically, because the
 container operates behind Caddy.
 
+The proxy must also send the cookies of the browser to the server. The server
+sets a cookie at `/authorize` and reads it at `/oauth/callback`, to make certain
+that the same browser completes the operation that started it. A proxy that
+removes cookies stops all sign-in operations.
+
 **Caution:** If you start the binary without a proxy, do not set this variable,
 or set it to `false`. If you set it to `true` without a proxy, a client can
 give a false IP address. The client can then get more requests than the rate
