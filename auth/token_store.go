@@ -42,7 +42,10 @@ type AuthState struct {
 	ClientID     string
 	Resource     string // RFC 9728: resource parameter for audience binding
 	Issuer       string // RFC 9207: issuer identifier resolved at authorize time
-	CreatedAt    time.Time
+	// BindingHash is the SHA-256 of the binding cookie issued to the browser
+	// that started this flow. The callback requires a cookie that hashes to it.
+	BindingHash string
+	CreatedAt   time.Time
 }
 
 // ClientInfo holds information about a registered OAuth client (RFC 7591).
