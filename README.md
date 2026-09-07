@@ -501,12 +501,28 @@ examples. Set `TRUST_PROXY=true` for this condition. The rate limiter then uses
 the real IP address of the client from the `X-Forwarded-For` header. If you do
 not set this variable, the rate limiter uses the address of the proxy.
 
+The rate limiter reads the **last** entry in the header. A proxy adds the
+address of its peer to the end of the header. Thus the last entry is the entry
+that your own proxy wrote. The entries before it come from the client, and a
+client can give false values for them. If the header occurs more than one time,
+the server reads the last entry of the last occurrence.
+
+This operation assumes one proxy between the client and the server. If you use
+two proxies, the last entry is the address of the proxy that is nearest to the
+client, not the address of the client. All clients behind that proxy then share
+one limit.
+
 ```bash
 TRUST_PROXY=true
 ```
 
 The Docker Compose configuration sets this variable automatically, because the
 container operates behind Caddy.
+
+The proxy must also send the cookies of the browser to the server. The server
+sets a cookie at `/authorize` and reads it at `/oauth/callback`, to make certain
+that the same browser completes the operation that started it. A proxy that
+removes cookies stops all sign-in operations.
 
 **Caution:** If you start the binary without a proxy, do not set this variable,
 or set it to `false`. If you set it to `true` without a proxy, a client can
@@ -542,6 +558,18 @@ TOKEN_STORE_PATH=/data/tokens.json
 
 The server writes the file with the permissions `0600`. The file contains
 refresh tokens. Thus you must keep the volume secret.
+
+Authorization codes are kept separately in memory for five minutes and are
+never valid as MCP bearer tokens. Unfinished sign-ins must restart after a
+server restart. When loading an older token file, the server discards untyped
+entries without a refresh token because they may be temporary authorization
+codes; existing issued sessions with refresh tokens remain usable.
+
+Refresh-token rotation is atomic. Clients must serialize refresh requests:
+if two requests use the same refresh token, only one succeeds and the other
+receives `invalid_grant`. With file persistence enabled, the server commits
+the replacement to disk before returning credentials; a failed write returns
+an error without consuming the previous credential.
 
 The directory must be writable by the user that operates the server. The Docker
 image operates as the user `appuser`. The image supplies the directory `/data`

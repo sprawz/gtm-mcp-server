@@ -7,6 +7,7 @@ go-sdk-main/
 !ARCHITECTURE.md
 !skills/**/*.md
 !gtm/bestpractices/docs/*.md
+!planning/*.md
 .env.local
 .*/
 !.github/
@@ -17,6 +18,9 @@ go-sdk-main/
 
 # Build artifacts
 dist/
+
+# Local test credentials and scratch files
+/tmp/
 
 # Binary
 gtm-mcp-server

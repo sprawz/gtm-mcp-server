@@ -20,6 +20,9 @@ var (
 
 // TokenInfo holds information about an issued token and the associated Google tokens.
 type TokenInfo struct {
+	// Kind distinguishes newly persisted access credentials from legacy untyped
+	// authorization-code entries. StoreToken sets it; callers need not do so.
+	Kind string `json:",omitempty"`
 	// Our token (issued to Claude)
 	AccessToken      string
 	RefreshToken     string
@@ -34,6 +37,13 @@ type TokenInfo struct {
 	CreatedAt time.Time
 }
 
+// AuthorizationCode is ephemeral and never enters the bearer-token store.
+type AuthorizationCode struct {
+	AuthState
+	GoogleToken *oauth2.Token
+	ExpiresAt   time.Time
+}
+
 // AuthState holds temporary state during OAuth flow.
 type AuthState struct {
 	State        string
@@ -42,7 +52,10 @@ type AuthState struct {
 	ClientID     string
 	Resource     string // RFC 9728: resource parameter for audience binding
 	Issuer       string // RFC 9207: issuer identifier resolved at authorize time
-	CreatedAt    time.Time
+	// BindingHash is the SHA-256 of the binding cookie issued to the browser
+	// that started this flow. The callback requires a cookie that hashes to it.
+	BindingHash string
+	CreatedAt   time.Time
 }
 
 // ClientInfo holds information about a registered OAuth client (RFC 7591).
@@ -66,6 +79,11 @@ type TokenStore interface {
 	DeleteToken(accessToken string) error
 	UpdateGoogleToken(accessToken string, googleToken *oauth2.Token) error
 	ExtendTokenExpiry(accessToken string, newExpiry time.Time) error
+	// RotateToken atomically replaces a still-valid refresh credential. Only one
+	// caller may succeed; persistent stores commit before acknowledging success.
+	RotateToken(refreshToken string, successor *TokenInfo) error
+	StoreAuthorizationCode(code *AuthorizationCode) error
+	ConsumeAuthorizationCode(code string) (*AuthorizationCode, error)
 
 	// State operations (for OAuth flow)
 	StoreState(state *AuthState) error
@@ -85,6 +103,7 @@ type MemoryTokenStore struct {
 	tokens  map[string]*TokenInfo  // keyed by access token
 	states  map[string]*AuthState  // keyed by state value
 	clients map[string]*ClientInfo // keyed by client_id
+	codes   map[string]*AuthorizationCode
 
 	// Secondary index for refresh token lookup
 	refreshIndex map[string]string // refresh token -> access token
@@ -100,6 +119,7 @@ func NewMemoryTokenStore() *MemoryTokenStore {
 		tokens:       make(map[string]*TokenInfo),
 		states:       make(map[string]*AuthState),
 		clients:      make(map[string]*ClientInfo),
+		codes:        make(map[string]*AuthorizationCode),
 		refreshIndex: make(map[string]string),
 		cancel:       cancel,
 	}
@@ -120,11 +140,83 @@ func (s *MemoryTokenStore) StoreToken(info *TokenInfo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.tokens[info.AccessToken] = cloneTokenInfo(info)
+	s.tokens[info.AccessToken] = issuedToken(info)
 	if info.RefreshToken != "" {
 		s.refreshIndex[info.RefreshToken] = info.AccessToken
 	}
 
+	return nil
+}
+
+func issuedToken(info *TokenInfo) *TokenInfo {
+	copy := cloneTokenInfo(info)
+	copy.Kind = "access_token"
+	return copy
+}
+
+func (s *MemoryTokenStore) StoreAuthorizationCode(code *AuthorizationCode) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copy := *code
+	s.codes[code.State] = &copy
+	return nil
+}
+
+func (s *MemoryTokenStore) ConsumeAuthorizationCode(code string) (*AuthorizationCode, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.codes[code]
+	if !ok {
+		return nil, ErrInvalidState
+	}
+	delete(s.codes, code)
+	if !time.Now().Before(entry.ExpiresAt) {
+		return nil, ErrInvalidState
+	}
+	copy := *entry
+	return &copy, nil
+}
+
+// rotationPredecessorLocked validates the transaction under the write lock.
+func (s *MemoryTokenStore) rotationPredecessorLocked(refreshToken string, successor *TokenInfo) (string, error) {
+	access, ok := s.refreshIndex[refreshToken]
+	if !ok {
+		return "", ErrTokenNotFound
+	}
+	old, ok := s.tokens[access]
+	if !ok || old.RefreshToken != refreshToken {
+		return "", ErrTokenNotFound
+	}
+	if !old.RefreshExpiresAt.IsZero() && !time.Now().Before(old.RefreshExpiresAt) {
+		return "", ErrTokenExpired
+	}
+	if successor == nil || successor.AccessToken == "" || successor.RefreshToken == "" || successor.ClientID != old.ClientID {
+		return "", errors.New("invalid rotation successor")
+	}
+	if _, exists := s.tokens[successor.AccessToken]; exists {
+		return "", errors.New("access token collision")
+	}
+	if _, exists := s.refreshIndex[successor.RefreshToken]; exists {
+		return "", errors.New("refresh token collision")
+	}
+	return access, nil
+}
+
+func (s *MemoryTokenStore) commitRotationLocked(access, refresh string, successor *TokenInfo) {
+	delete(s.tokens, access)
+	delete(s.refreshIndex, refresh)
+	s.tokens[successor.AccessToken] = issuedToken(successor)
+	s.refreshIndex[successor.RefreshToken] = successor.AccessToken
+}
+
+func (s *MemoryTokenStore) RotateToken(refreshToken string, successor *TokenInfo) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	access, err := s.rotationPredecessorLocked(refreshToken, successor)
+	if err != nil {
+		return err
+	}
+	s.commitRotationLocked(access, refreshToken, successor)
 	return nil
 }
 
@@ -353,6 +445,11 @@ func (s *MemoryTokenStore) purgeExpired(now time.Time) {
 	for stateValue, state := range s.states {
 		if now.Sub(state.CreatedAt) > 10*time.Minute {
 			delete(s.states, stateValue)
+		}
+	}
+	for code, entry := range s.codes {
+		if !now.Before(entry.ExpiresAt) {
+			delete(s.codes, code)
 		}
 	}
 	// Evict oldest clients until back under limit
