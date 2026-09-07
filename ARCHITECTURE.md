@@ -54,8 +54,8 @@ OAuth 2.1 implementation with two modes:
 | **S2S** | `SERVICE_ACCOUNT_API_KEY` set | Client sends API key as Bearer → server uses Google Service Account for GTM calls |
 
 Key design decisions:
-- **In-memory token store.** No database. Redeployment requires re-auth. Acceptable because tokens are short-lived and the server is single-instance.
-- **Auto-refresh in middleware.** When an access token expires but the refresh token is valid, middleware refreshes the Google token in-place and extends the access token TTL — the client's bearer stays valid without re-auth.
+- **Token store: in memory, optionally file-backed.** No database. By default nothing is persisted, so a redeployment forces every user to re-authenticate. Setting `TOKEN_STORE_PATH` writes issued tokens to a JSON file (mode `0600`, in a directory created `0700`) so sessions survive a restart. It fails closed: if the file cannot be created or read, the server stops at start-up rather than silently discarding sessions. Only issued tokens are persisted — OAuth flow states (10-minute lifetime) and dynamically-registered clients are not, since they are short-lived or re-created by the client on reconnect.
+- **Auto-refresh in middleware.** When an access token expires but the refresh token is valid, middleware refreshes the Google token in-place and extends the access token TTL — the client's bearer stays valid without re-auth. `AUTH_AUTO_REFRESH_MAX_AGE` caps the total age of a silently renewed bearer (default `168h`), so an expired bearer cannot be extended indefinitely.
 - **PKCE required.** No client_secret needed from MCP clients. Code binding via SHA256 challenge.
 - **Federation state bound to the browser.** `/authorize` sets an opaque `HttpOnly; SameSite=Lax` cookie and records only its SHA-256 on the state row; the callback refuses any request whose cookie does not hash to it. Over https the cookie takes the `__Host-` prefix, so a browser accepts it only for this exact host — which is what stops a sibling subdomain, or a network attacker on plain http under the parent domain, from planting one. The prefix mandates `Path=/` and `Secure`, so a plain-http run keeps the unprefixed name scoped to `/oauth/callback`; the callback accepts only the name matching its own flow's issuer. Which regime applies is the stronger of the configured `BASE_URL` and the issuer resolved for the flow, so a request cannot lower it — `URLResolver` reads the scheme from an ungated `X-Forwarded-Proto`, and the attacker owns that header on the request that starts the flow. Without this, `state` is a bare server-side lookup key, and since dynamic client registration is open, an attacker could have a victim's Google code minted against the attacker's own registered `redirect_uri`.
 - **RFC compliance.** RFC 8414 (server metadata), RFC 9728 (protected resource metadata), RFC 7591 (dynamic client registration).
@@ -83,7 +83,7 @@ bestpractices/   → go:embed'd markdown rule docs (naming, safe edits, GA4/cons
 **autoEventFilter remapping:** The GTM API silently drops `autoEventFilter` for `linkClick`/`click`/`formSubmission` triggers. `mutations.go` owns the remapping to `filter` — tool handlers don't duplicate this logic.
 
 ### `middleware/`
-- **Rate limiting.** Per-IP token bucket (`golang.org/x/time/rate`). When `TRUST_PROXY=true`, uses `X-Forwarded-For` for client IP; otherwise uses `RemoteAddr` only to prevent spoofing.
+- **Rate limiting.** Per-IP token bucket (`golang.org/x/time/rate`). When `TRUST_PROXY=true`, uses the **rightmost** `X-Forwarded-For` entry for client IP (the one the proxy appended; entries left of it are client-supplied and spoofable); otherwise uses `RemoteAddr` only to prevent spoofing.
 - **Logging.** Structured JSON logs for MCP request/response.
 
 ## Request Lifecycle
