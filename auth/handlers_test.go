@@ -609,13 +609,11 @@ func TestServer_HandleAuthorizationCodeGrant_MissingCodeVerifier(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	server := NewServer("http://localhost:8080", nil, store, logger, 1*time.Hour)
 
-	// Store a valid code state
-	codeState := &AuthState{
-		State:        "valid-code",
-		CodeVerifier: "test-challenge",
-		CreatedAt:    time.Now(),
-	}
-	store.StoreState(codeState)
+	// Store a valid authorization code in its dedicated ephemeral namespace.
+	store.StoreAuthorizationCode(&AuthorizationCode{
+		AuthState: AuthState{State: "valid-code", CodeVerifier: "test-challenge", CreatedAt: time.Now()},
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+	})
 
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")

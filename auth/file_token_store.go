@@ -18,8 +18,8 @@ import (
 // snapshot to disk after every token mutation. The embedded store's background
 // purge does not trigger a write, so the file can hold purged entries until the
 // next mutation rewrites it; that is deliberate — load skips entries with a
-// lapsed refresh window, and a reloaded auth-code token is rejected on lookup,
-// so the lag has no security consequence.
+// lapsed refresh window. Authorization codes live in a separate ephemeral map;
+// legacy untyped code entries are discarded during load.
 //
 // Only issued tokens are persisted. OAuth flow states (10-minute lifetime) and
 // dynamically-registered clients are intentionally not persisted: they are
@@ -101,6 +101,32 @@ func (f *FileTokenStore) ExtendTokenExpiry(accessToken string, newExpiry time.Ti
 	return nil
 }
 
+// RotateToken serializes with snapshot writers, then holds the memory lock
+// through the disk commit. A failed write leaves both live indexes unchanged.
+// Always acquire saveMu before mu, matching persist -> snapshot.
+func (f *FileTokenStore) RotateToken(refreshToken string, successor *TokenInfo) error {
+	f.saveMu.Lock()
+	defer f.saveMu.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	access, err := f.rotationPredecessorLocked(refreshToken, successor)
+	if err != nil {
+		return err
+	}
+	tokens := make([]*TokenInfo, 0, len(f.tokens))
+	for key, info := range f.tokens {
+		if key != access {
+			tokens = append(tokens, cloneTokenInfo(info))
+		}
+	}
+	tokens = append(tokens, issuedToken(successor))
+	if err := f.writeSnapshot(persistedState{Tokens: tokens}); err != nil {
+		return err
+	}
+	f.commitRotationLocked(access, refreshToken, successor)
+	return nil
+}
+
 // load reads tokens from disk into the in-memory maps. Tokens whose refresh
 // window has already lapsed are skipped — they cannot be refreshed anyway.
 func (f *FileTokenStore) load() error {
@@ -127,10 +153,16 @@ func (f *FileTokenStore) load() error {
 		if info == nil || info.AccessToken == "" {
 			continue
 		}
+		// Legacy production sessions always had refresh credentials. Untyped
+		// entries without them may be authorization codes and must never reload.
+		// New explicitly marked access-only tokens retain their prior behavior.
+		if (info.Kind == "" && info.RefreshToken == "") || (info.Kind != "" && info.Kind != "access_token") {
+			continue
+		}
 		if !info.RefreshExpiresAt.IsZero() && now.After(info.RefreshExpiresAt) {
 			continue
 		}
-		f.MemoryTokenStore.tokens[info.AccessToken] = info
+		f.MemoryTokenStore.tokens[info.AccessToken] = issuedToken(info)
 		if info.RefreshToken != "" {
 			f.MemoryTokenStore.refreshIndex[info.RefreshToken] = info.AccessToken
 		}
@@ -153,7 +185,11 @@ func (f *FileTokenStore) persist() error {
 	defer f.saveMu.Unlock()
 
 	state := persistedState{Tokens: f.snapshot()}
+	return f.writeSnapshot(state)
+}
 
+// writeSnapshot requires saveMu and never acquires the memory-store lock.
+func (f *FileTokenStore) writeSnapshot(state persistedState) error {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal token store: %w", err)
