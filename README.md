@@ -3,8 +3,8 @@
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-8A2BE2)](https://modelcontextprotocol.io/)
-[![Security Checks](https://github.com/sprawz/gtm-mcp-server/actions/workflows/security.yml/badge.svg)](https://github.com/sprawz/gtm-mcp-server/actions/workflows/security.yml)
-[![GitHub release](https://img.shields.io/github/v/release/sprawz/gtm-mcp-server)](https://github.com/sprawz/gtm-mcp-server/releases)
+[![Security Checks](https://github.com/paolobietolini/gtm-mcp-server/actions/workflows/security.yml/badge.svg)](https://github.com/paolobietolini/gtm-mcp-server/actions/workflows/security.yml)
+[![GitHub release](https://img.shields.io/github/v/release/paolobietolini/gtm-mcp-server)](https://github.com/paolobietolini/gtm-mcp-server/releases)
 
 GTM MCP Server connects MCP clients to the Google Tag Manager API. It can
 inspect containers, create and update workspace entities, create versions, and
@@ -440,7 +440,7 @@ http://localhost:8080/oauth/callback
 ### Run from source
 
 ```bash
-git clone https://github.com/sprawz/gtm-mcp-server.git
+git clone https://github.com/paolobietolini/gtm-mcp-server.git
 cd gtm-mcp-server
 
 cat > .env <<'EOF'
@@ -543,7 +543,7 @@ keeps a rollback image, rebuilds the service, and waits until `/health` reports
 the expected version.
 
 Recent commits on `main` can be newer than the latest tagged release. Check the
-[release page](https://github.com/sprawz/gtm-mcp-server/releases) when you need a
+[release page](https://github.com/paolobietolini/gtm-mcp-server/releases) when you need a
 reproducible published artifact.
 
 ## Development
@@ -569,7 +569,7 @@ tests must use a disposable container and clean up their entities.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for package boundaries, request flow,
 authentication internals, token persistence, and security invariants.
 
-For a deep dive into the Google Tag Manager MCP server, read the [Deep Wiki](https://deepwiki.com/sprawz/gtm-mcp-server).
+For a deep dive into the Google Tag Manager MCP server, read the [Deep Wiki](https://deepwiki.com/paolobietolini/gtm-mcp-server).
 
 
 ## Current limitations
@@ -579,7 +579,7 @@ For a deep dive into the Google Tag Manager MCP server, read the [Deep Wiki](htt
 - The server supports Streamable HTTP only. Stdio transport is planned but is
   not implemented.
 - The optional connection dashboard is under review in
-  [PR #107](https://github.com/sprawz/gtm-mcp-server/pull/107); it is not part of
+  [PR #107](https://github.com/paolobietolini/gtm-mcp-server/pull/107); it is not part of
   `main`.
 - The hosted service processes OAuth tokens. Self-host the server when your
   policy requires control of the runtime and token store.
@@ -600,4 +600,4 @@ For a deep dive into the Google Tag Manager MCP server, read the [Deep Wiki](htt
 
 BSD 3-Clause. See [LICENSE](LICENSE).
 
-Maintained by [Paolo Bietolini](https://github.com/sprawz).
+Maintained by [Paolo Bietolini](https://github.com/paolobietolini).
